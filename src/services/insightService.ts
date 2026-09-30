@@ -118,7 +118,7 @@ export async function computeInsights(userId: string): Promise<void> {
       .filter(e => {
         if (e.quickActionId && trigger.id === `qa_${e.quickActionId}`) return true;
         if (e.categoryId   && trigger.id === `cat_${e.categoryId}`)   return true;
-        return e.answers.some(a => `opt_${a.optionId}` === trigger.id);
+        return e.answers.some((a: any) => `opt_${a.optionId}` === trigger.id);
       })
       .map(e => e.occurredAt);
 
@@ -141,7 +141,7 @@ export async function computeInsights(userId: string): Promise<void> {
             if (symptom.id.startsWith('cat_') && e.categoryId) {
               return `cat_${e.categoryId}` === symptom.id;
             }
-            return e.answers.some(a => `opt_${a.optionId}` === symptom.id);
+            return e.answers.some((a: any) => `opt_${a.optionId}` === symptom.id);
           });
 
           if (found) coOccurrences++;
@@ -158,7 +158,7 @@ export async function computeInsights(userId: string): Promise<void> {
         const baselineCount = symptomEntries.filter(e =>
           symptom.id.startsWith('cat_')
             ? e.categoryId && `cat_${e.categoryId}` === symptom.id
-            : e.answers.some(a => `opt_${a.optionId}` === symptom.id),
+            : e.answers.some((a: any) => `opt_${a.optionId}` === symptom.id),
         ).length;
 
         const baselineRate = totalWindowsInData > 0 ? baselineCount / totalWindowsInData : 0;

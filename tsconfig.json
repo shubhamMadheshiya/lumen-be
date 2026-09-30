@@ -11,11 +11,8 @@
     "declaration": true,
     "sourceMap": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "paths": {
-      "@lumen/shared": ["../shared/dist/index.d.ts"]
-    }
+    "emitDecoratorMetadata": true
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "exclude": ["node_modules", "dist", "tests", "src/__tests__", "**/*.test.ts"]
 }

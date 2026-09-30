@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { ActivityType, ActivitySessionStatus } from '@lumen/shared';
+import { ActivityType, ActivitySessionStatus } from '../shared';
 
 export interface IActivityPointDoc {
   latitude: number;

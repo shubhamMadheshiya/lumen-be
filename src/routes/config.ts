@@ -24,7 +24,7 @@ import {
   CreateMedicationSchema,
   CreateReminderSchema,
   ReorderSchema,
-} from '@lumen/shared';
+} from '../shared';
 
 export const configRouter = Router();
 configRouter.use(authenticate);

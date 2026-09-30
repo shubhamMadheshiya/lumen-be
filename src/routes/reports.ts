@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import PDFDocument from 'pdfkit';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
-import { ReportRequestSchema } from '@lumen/shared';
+import { ReportRequestSchema } from '../shared';
 import { LogEntry } from '../models/LogEntry';
 import { Category } from '../models/Category';
 import { User } from '../models/User';

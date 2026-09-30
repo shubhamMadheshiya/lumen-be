@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { ReminderCategory, ReminderScheduleType, WeekDay } from '@lumen/shared';
+import { ReminderCategory, ReminderScheduleType, WeekDay } from '../shared';
 
 export interface IReminderDoc extends Document {
   userId: mongoose.Types.ObjectId;

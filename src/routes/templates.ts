@@ -1,7 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
-import { ApplyTemplatesSchema, ALL_CATEGORY_TEMPLATES, QUICK_ACTION_TEMPLATES, CONDITION_BUNDLES } from '@lumen/shared';
+import { ApplyTemplatesSchema, ALL_CATEGORY_TEMPLATES, QUICK_ACTION_TEMPLATES, CONDITION_BUNDLES } from '../shared';
 import { applyConditionBundle, applyTemplateKeys } from '../services/templateService';
 
 export const templatesRouter = Router();

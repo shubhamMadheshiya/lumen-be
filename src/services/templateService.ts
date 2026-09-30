@@ -9,7 +9,7 @@ import {
   CONDITION_BUNDLES,
   TemplateCategory,
   TemplateQuickAction,
-} from '@lumen/shared';
+} from '../shared';
 import { Category } from '../models/Category';
 import { Question } from '../models/Question';
 import { Option } from '../models/Option';

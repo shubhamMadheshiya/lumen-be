@@ -3,7 +3,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { AppError } from '../utils/errors';
 import { DaySession } from '../models/DaySession';
-import { WakeUpSchema, GoToSleepSchema, UpdateDaySessionSchema } from '@lumen/shared';
+import { WakeUpSchema, GoToSleepSchema, UpdateDaySessionSchema } from '../shared';
 import mongoose from 'mongoose';
 
 export const daySessionsRouter = Router();

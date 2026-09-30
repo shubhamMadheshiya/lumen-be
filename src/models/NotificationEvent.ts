@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { NotificationStatus } from '@lumen/shared';
+import { NotificationStatus } from '../shared';
 
 export interface INotificationEventDoc extends Document {
   userId: mongoose.Types.ObjectId;

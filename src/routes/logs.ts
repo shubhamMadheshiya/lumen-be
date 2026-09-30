@@ -4,7 +4,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { AppError } from '../utils/errors';
 import { LogEntry } from '../models/LogEntry';
-import { CreateLogEntrySchema, BatchLogEntrySchema } from '@lumen/shared';
+import { CreateLogEntrySchema, BatchLogEntrySchema } from '../shared';
 import { z } from 'zod';
 
 export const logsRouter = Router();

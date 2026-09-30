@@ -17,7 +17,7 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/
 import { validate } from '../middleware/validate';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { AppError } from '../utils/errors';
-import { RegisterSchema, LoginSchema } from '@lumen/shared';
+import { RegisterSchema, LoginSchema } from '../shared';
 import { applyConditionBundle } from '../services/templateService';
 import { config } from '../config';
 
