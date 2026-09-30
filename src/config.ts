@@ -14,7 +14,7 @@ function optional(key: string, fallback = ''): string {
 export const config = {
   nodeEnv: optional('NODE_ENV', 'development'),
   port: parseInt(optional('PORT', '3000'), 10),
-  mongoUri: optional('MONGO_URI', 'mongodb://lumen:lumen_dev_pass@localhost:27017/lumen?authSource=admin'),
+  mongoUri: optional('MONGO_URI', optional('MONGODB_URI', 'mongodb://lumen:lumen_dev_pass@localhost:27017/lumen?authSource=admin')),
 
   jwt: {
     accessSecret: optional('JWT_ACCESS_SECRET', 'dev_access_secret_at_least_32_chars!!'),
