@@ -1,0 +1,17 @@
+{
+  "name": "@lumen/shared",
+  "version": "0.1.0",
+  "description": "Shared types, Zod schemas and template data for the Lumen app",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}
