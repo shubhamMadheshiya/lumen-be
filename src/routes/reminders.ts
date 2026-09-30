@@ -24,22 +24,27 @@ remindersRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunct
 remindersRouter.post('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = uid(req);
-    const body = req.body;
+    const body = { ...req.body };
     
     // If updating by clientId or _id
-    if (body.clientId) {
-      const existing = await Reminder.findOne({ userId, clientId: body.clientId });
+    const clientId = body.clientId || (body._id && !mongoose.Types.ObjectId.isValid(body._id) ? body._id : undefined);
+    if (clientId) {
+      const existing = await Reminder.findOne({ userId, clientId });
       if (existing) {
+        if (body._id && !mongoose.Types.ObjectId.isValid(body._id)) delete body._id;
         Object.assign(existing, body);
         await existing.save();
         return res.json({ success: true, data: existing });
       }
     }
 
-    const reminder = await Reminder.create({
-      ...body,
-      userId,
-    });
+    const createData = { ...body, userId };
+    if (createData._id && !mongoose.Types.ObjectId.isValid(createData._id)) {
+      if (!createData.clientId) createData.clientId = createData._id;
+      delete createData._id;
+    }
+
+    const reminder = await Reminder.create(createData);
     res.status(201).json({ success: true, data: reminder });
   } catch (err) { next(err); }
 });

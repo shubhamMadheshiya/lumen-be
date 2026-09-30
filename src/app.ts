@@ -5,6 +5,8 @@ import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 
+import mongoose from 'mongoose';
+
 import { config } from './config';
 import { authRouter } from './routes/auth';
 import { configRouter } from './routes/config';
@@ -24,7 +26,7 @@ export function createApp(): Application {
   // ── Security ──────────────────────────────────
   app.use(helmet());
   app.use(cors({
-    origin: config.isDev ? '*' : [],
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   }));
@@ -46,13 +48,30 @@ export function createApp(): Application {
   // ── Logging ───────────────────────────────────
   app.use(morgan(config.isDev ? 'dev' : 'combined'));
 
-  // ── Health check ──────────────────────────────
-  app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', ts: new Date().toISOString() });
-  });
+  // ── Health / Alive checks ──────────────────────
+  const aliveHandler = (_req: Request, res: Response) => {
+    const dbState = mongoose.connection.readyState;
+    const dbStatus = dbState === 1 ? 'connected' : dbState === 2 ? 'connecting' : 'disconnected';
+
+    res.status(200).json({
+      status: 'alive',
+      message: 'Lumen API is alive and kicking! 🚀',
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.floor(process.uptime()),
+      environment: config.nodeEnv,
+      database: dbStatus,
+    });
+  };
+
+  app.get('/', aliveHandler);
+  app.get('/alive', aliveHandler);
+  app.get('/health', aliveHandler);
+  app.get('/healthz', aliveHandler);
 
   // ── API routes ────────────────────────────────
   const v1 = '/api/v1';
+  app.get(`${v1}/alive`, aliveHandler);
+  app.get(`${v1}/health`, aliveHandler);
   app.use(`${v1}/auth`,              authRouter);
   app.use(`${v1}/config`,            configRouter);
   app.use(`${v1}/templates`,         templatesRouter);
