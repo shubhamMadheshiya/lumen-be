@@ -58,7 +58,6 @@ export function createApp(): Application {
       message: 'Lumen API is alive and kicking! 🚀',
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
-      environment: config.nodeEnv,
       database: dbStatus,
     });
   };

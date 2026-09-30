@@ -99,22 +99,29 @@ syncRouter.post('/push', async (req: AuthRequest, res: Response, next: NextFunct
 
     // ── Sync reminders ────────────────────────
     for (const rem of reminders) {
-      const clientId = rem.clientId as string;
+      const clientId = rem.clientId as string || (!mongoose.Types.ObjectId.isValid(rem._id as string) ? rem._id as string : undefined);
       const id = rem._id as string;
-      const query = clientId ? { userId, clientId } : { userId, _id: id };
+      const query = clientId ? { userId, clientId } : (mongoose.Types.ObjectId.isValid(id) ? { userId, _id: id } : { userId, clientId: id });
       const updatedAt = rem.updatedAt ? new Date(rem.updatedAt as string) : new Date();
 
       const existing = await Reminder.findOne(query);
       if (existing) {
         if (!existing.updatedAt || updatedAt > existing.updatedAt) {
-          Object.assign(existing, rem);
+          const updateData: Record<string, any> = { ...rem };
+          if (updateData._id && !mongoose.Types.ObjectId.isValid(updateData._id as string)) delete updateData._id;
+          Object.assign(existing, updateData);
           await existing.save();
           results.reminders.push({ id: existing._id, status: 'updated' });
         } else {
           results.reminders.push({ id: existing._id, status: 'skipped_older' });
         }
       } else {
-        const created = await Reminder.create({ ...rem, userId });
+        const createData: Record<string, any> = { ...rem, userId };
+        if (createData._id && !mongoose.Types.ObjectId.isValid(createData._id as string)) {
+          if (!createData.clientId) createData.clientId = createData._id;
+          delete createData._id;
+        }
+        const created = await Reminder.create(createData);
         results.reminders.push({ id: created._id, status: 'created' });
       }
     }
