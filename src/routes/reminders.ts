@@ -15,7 +15,11 @@ function uid(req: AuthRequest): mongoose.Types.ObjectId {
 remindersRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = uid(req);
-    const reminders = await Reminder.find({ userId, archivedAt: { $exists: false } }).sort({ createdAt: -1 });
+    const filter: Record<string, unknown> = { userId };
+    if (req.query.includeArchived !== 'true') {
+      filter.archivedAt = { $exists: false };
+    }
+    const reminders = await Reminder.find(filter).sort({ createdAt: -1 });
     res.json({ success: true, data: reminders });
   } catch (err) { next(err); }
 });
@@ -73,10 +77,16 @@ remindersRouter.put('/:id', async (req: AuthRequest, res: Response, next: NextFu
   } catch (err) { next(err); }
 });
 
-// DELETE /api/v1/reminders/:id
+// DELETE /api/v1/reminders/:id (soft archive by default, permanent if ?permanent=true)
 remindersRouter.delete('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = uid(req);
+    if (req.query.permanent === 'true') {
+      const deleted = await Reminder.findOneAndDelete({ _id: req.params.id, userId });
+      if (!deleted) return res.status(404).json({ success: false, error: 'Reminder not found' });
+      return res.json({ success: true, data: { deleted: true } });
+    }
+
     const reminder = await Reminder.findOneAndUpdate(
       { _id: req.params.id, userId },
       { $set: { archivedAt: new Date(), enabled: false } },
@@ -84,6 +94,30 @@ remindersRouter.delete('/:id', async (req: AuthRequest, res: Response, next: Nex
     );
     if (!reminder) return res.status(404).json({ success: false, error: 'Reminder not found' });
     res.json({ success: true, data: { archived: true } });
+  } catch (err) { next(err); }
+});
+
+// POST /api/v1/reminders/:id/unarchive
+remindersRouter.post('/:id/unarchive', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    const reminder = await Reminder.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      { $set: { enabled: true, isActive: true }, $unset: { archivedAt: 1 } },
+      { new: true }
+    );
+    if (!reminder) return res.status(404).json({ success: false, error: 'Reminder not found' });
+    res.json({ success: true, data: reminder });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/v1/reminders/:id/permanent
+remindersRouter.delete('/:id/permanent', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    const reminder = await Reminder.findOneAndDelete({ _id: req.params.id, userId });
+    if (!reminder) return res.status(404).json({ success: false, error: 'Reminder not found' });
+    res.json({ success: true, data: { deleted: true } });
   } catch (err) { next(err); }
 });
 
