@@ -23,6 +23,7 @@ export interface IReminderDoc extends Document {
   notificationTitle?: string;
   notificationMessage: string;
   snoozeDurationMinutes: number;
+  sound?: string;
   
   linkedQuickActionId?: mongoose.Types.ObjectId;
   linkedQuestionId?: mongoose.Types.ObjectId;
@@ -67,6 +68,7 @@ const ReminderSchema = new Schema<IReminderDoc>(
     notificationTitle:          { type: String },
     notificationMessage:        { type: String, required: true, maxlength: 300 },
     snoozeDurationMinutes:      { type: Number, default: 10 },
+    sound:                      { type: String, default: 'default' },
     linkedQuickActionId:        { type: Schema.Types.ObjectId, ref: 'QuickAction' },
     linkedQuestionId:           { type: Schema.Types.ObjectId, ref: 'Question' },
     

@@ -197,6 +197,7 @@ export interface IReminder {
     notificationTitle?: string;
     notificationMessage: string;
     snoozeDurationMinutes: number;
+    sound?: string;
     linkedQuickActionId?: string;
     linkedQuestionId?: string;
     type?: ReminderType;

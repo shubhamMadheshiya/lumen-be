@@ -283,6 +283,7 @@ export interface IReminder {
   notificationTitle?: string;
   notificationMessage: string;    // e.g., "Time to hydrate"
   snoozeDurationMinutes: number;  // 5, 10, 15, 30
+  sound?: string;                 // 'default' | 'chime' | 'gentle_bell' | 'digital_alarm' | 'zen_gong' | 'radar'
   
   // Linkages to Tracking Engine
   linkedQuickActionId?: string;   // QuickAction ID to trigger on action
