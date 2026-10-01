@@ -205,6 +205,20 @@ export const LoginSchema = z.object({
   password: z.string(),
 });
 
+export const UpdateProfileSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  conditions: z.array(z.string().min(1).max(100)).optional(),
+  preferences: z.object({
+    units: z.enum(['metric', 'imperial']).optional(),
+    tempUnit: z.enum(['C', 'F']).optional(),
+    timezone: z.string().optional(),
+    theme: z.enum(['light', 'dark', 'system']).optional(),
+    dayBoundaryHour: z.number().int().min(0).max(12).optional(),
+  }).optional(),
+});
+
+export type UpdateProfileDto = z.infer<typeof UpdateProfileSchema>;
+
 // ────────── Reminder ──────────
 
 export const CreateReminderSchema = z.object({

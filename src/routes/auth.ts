@@ -13,11 +13,12 @@ import { Media } from '../models/Media';
 import { Reminder } from '../models/Reminder';
 import { Medication } from '../models/Medication';
 import { CustomUnit } from '../models/CustomUnit';
+import { ActivitySession } from '../models/ActivitySession';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { validate } from '../middleware/validate';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { AppError } from '../utils/errors';
-import { RegisterSchema, LoginSchema } from '../shared';
+import { RegisterSchema, LoginSchema, UpdateProfileSchema, UpdateProfileDto } from '../shared';
 import { applyConditionBundle } from '../services/templateService';
 import { config } from '../config';
 
@@ -62,6 +63,10 @@ authRouter.post('/login', validate(LoginSchema), async (req: Request, res: Respo
 
     const user = await User.findOne({ email }).select('+passwordHash');
     if (!user) throw AppError.unauthorized('Invalid email or password');
+
+    if (!user.passwordHash) {
+      throw AppError.badRequest('This account was registered with Google. Please use "Continue with Google" to sign in.');
+    }
 
     const valid = await user.comparePassword(password);
     if (!valid) throw AppError.unauthorized('Invalid email or password');
@@ -156,7 +161,72 @@ authRouter.post('/logout', authenticate, (req: Request, res: Response) => {
   res.json({ success: true, message: 'Logged out' });
 });
 
-// DELETE /me   — permanent account + data deletion
+// GET /auth/me — get current user profile details
+authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) throw AppError.notFound('User not found');
+
+    res.json({
+      success: true,
+      data: {
+        _id: user._id,
+        email: user.email,
+        name: user.name,
+        conditions: user.conditions || [],
+        preferences: user.preferences,
+        configVersion: user.configVersion,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /auth/me — update user profile (name, conditions, preferences)
+authRouter.patch('/me', authenticate, validate(UpdateProfileSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { name, conditions, preferences } = req.body as UpdateProfileDto;
+    const user = await User.findById(req.userId);
+    if (!user) throw AppError.notFound('User not found');
+
+    if (name !== undefined) {
+      user.name = name.trim();
+    }
+    if (conditions !== undefined) {
+      user.conditions = conditions;
+    }
+    if (preferences) {
+      user.preferences = {
+        ...user.preferences,
+        ...preferences,
+      };
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      data: {
+        _id: user._id,
+        email: user.email,
+        name: user.name,
+        conditions: user.conditions || [],
+        preferences: user.preferences,
+        configVersion: user.configVersion,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+      message: 'Profile updated successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /me — permanent account + data deletion
 authRouter.delete('/me', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const uid = req.userId!;
@@ -173,6 +243,7 @@ authRouter.delete('/me', authenticate, async (req: AuthRequest, res: Response, n
       Reminder.deleteMany({ userId: uid }),
       Medication.deleteMany({ userId: uid }),
       CustomUnit.deleteMany({ userId: uid }),
+      ActivitySession.deleteMany({ userId: uid }),
     ]);
     res.json({ success: true, message: 'Account and all data permanently deleted' });
   } catch (err) {

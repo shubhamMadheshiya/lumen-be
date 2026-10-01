@@ -72,6 +72,10 @@ export function createApp(): Application {
   app.get(`${v1}/alive`, aliveHandler);
   app.get(`${v1}/health`, aliveHandler);
   app.use(`${v1}/auth`,              authRouter);
+  app.all(`${v1}/me`, (req: Request, res: Response, next: NextFunction) => {
+    req.url = '/me';
+    authRouter(req, res, next);
+  });
   app.use(`${v1}/config`,            configRouter);
   app.use(`${v1}/templates`,         templatesRouter);
   app.use(`${v1}/day-sessions`,      daySessionsRouter);
