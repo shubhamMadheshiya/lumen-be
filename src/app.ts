@@ -77,6 +77,12 @@ export function createApp(): Application {
     authRouter(req, res, next);
   });
   app.use(`${v1}/config`,            configRouter);
+  ['/categories', '/questions', '/options', '/quick-actions', '/units'].forEach(subPath => {
+    app.use(`${v1}${subPath}`, (req: Request, res: Response, next: NextFunction) => {
+      req.url = subPath + (req.url === '/' ? '' : req.url);
+      configRouter(req, res, next);
+    });
+  });
   app.use(`${v1}/templates`,         templatesRouter);
   app.use(`${v1}/day-sessions`,      daySessionsRouter);
   app.use(`${v1}/logs`,              logsRouter);
