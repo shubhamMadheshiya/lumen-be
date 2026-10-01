@@ -7,6 +7,9 @@ export interface IUserDoc extends Document {
   googleId?: string;
   name: string;
   conditions: string[];
+  age?: number;
+  weight?: number;
+  gender?: 'male' | 'female' | 'non-binary' | 'other' | 'prefer_not_to_say';
   preferences: {
     units: 'metric' | 'imperial';
     tempUnit: 'C' | 'F';
@@ -28,6 +31,9 @@ const UserSchema = new Schema<IUserDoc>(
     googleId:     { type: String, select: false },
     name:         { type: String, required: true, trim: true, maxlength: 80 },
     conditions:   [{ type: String }],
+    age:          { type: Number, min: 0, max: 130 },
+    weight:       { type: Number, min: 0, max: 500 },
+    gender:       { type: String, enum: ['male', 'female', 'non-binary', 'other', 'prefer_not_to_say'] },
     preferences: {
       units:           { type: String, enum: ['metric', 'imperial'], default: 'metric' },
       tempUnit:        { type: String, enum: ['C', 'F'], default: 'C' },

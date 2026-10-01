@@ -174,6 +174,9 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
         email: user.email,
         name: user.name,
         conditions: user.conditions || [],
+        age: user.age,
+        weight: user.weight,
+        gender: user.gender,
         preferences: user.preferences,
         configVersion: user.configVersion,
         createdAt: user.createdAt,
@@ -185,10 +188,10 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
   }
 });
 
-// PATCH /auth/me — update user profile (name, conditions, preferences)
+// PATCH /auth/me — update user profile (name, conditions, preferences, vitals)
 authRouter.patch('/me', authenticate, validate(UpdateProfileSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { name, conditions, preferences } = req.body as UpdateProfileDto;
+    const { name, conditions, age, weight, gender, preferences } = req.body as UpdateProfileDto;
     const user = await User.findById(req.userId);
     if (!user) throw AppError.notFound('User not found');
 
@@ -197,6 +200,15 @@ authRouter.patch('/me', authenticate, validate(UpdateProfileSchema), async (req:
     }
     if (conditions !== undefined) {
       user.conditions = conditions;
+    }
+    if (age !== undefined) {
+      user.age = age;
+    }
+    if (weight !== undefined) {
+      user.weight = weight;
+    }
+    if (gender !== undefined) {
+      user.gender = gender;
     }
     if (preferences) {
       user.preferences = {
@@ -214,6 +226,9 @@ authRouter.patch('/me', authenticate, validate(UpdateProfileSchema), async (req:
         email: user.email,
         name: user.name,
         conditions: user.conditions || [],
+        age: user.age,
+        weight: user.weight,
+        gender: user.gender,
         preferences: user.preferences,
         configVersion: user.configVersion,
         createdAt: user.createdAt,

@@ -208,6 +208,9 @@ export const LoginSchema = z.object({
 export const UpdateProfileSchema = z.object({
   name: z.string().min(1).max(80).optional(),
   conditions: z.array(z.string().min(1).max(100)).optional(),
+  age: z.number().int().min(0).max(130).optional(),
+  weight: z.number().positive().max(500).optional(),
+  gender: z.enum(['male', 'female', 'non-binary', 'other', 'prefer_not_to_say']).optional(),
   preferences: z.object({
     units: z.enum(['metric', 'imperial']).optional(),
     tempUnit: z.enum(['C', 'F']).optional(),

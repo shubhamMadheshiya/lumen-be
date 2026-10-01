@@ -447,6 +447,9 @@ export interface IUser {
   email: string;
   name: string;
   conditions: string[];
+  age?: number;
+  weight?: number;
+  gender?: 'male' | 'female' | 'non-binary' | 'other' | 'prefer_not_to_say';
   preferences: UserPreferences;
   consentAcceptedAt?: string;
   configVersion: number;
