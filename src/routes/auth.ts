@@ -14,6 +14,7 @@ import { Reminder } from '../models/Reminder';
 import { Medication } from '../models/Medication';
 import { CustomUnit } from '../models/CustomUnit';
 import { ActivitySession } from '../models/ActivitySession';
+import { NotificationEvent } from '../models/NotificationEvent';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { validate } from '../middleware/validate';
 import { authenticate, AuthRequest } from '../middleware/auth';
@@ -259,6 +260,7 @@ authRouter.delete('/me', authenticate, async (req: AuthRequest, res: Response, n
       Medication.deleteMany({ userId: uid }),
       CustomUnit.deleteMany({ userId: uid }),
       ActivitySession.deleteMany({ userId: uid }),
+      NotificationEvent.deleteMany({ userId: uid }),
     ]);
     res.json({ success: true, message: 'Account and all data permanently deleted' });
   } catch (err) {
