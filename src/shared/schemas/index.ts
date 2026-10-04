@@ -159,7 +159,7 @@ export const AnswerSchema = z.object({
 
 export const CreateLogEntrySchema = z.object({
   clientId: z.string().uuid(),
-  source: z.enum(['quick_action', 'questionnaire', 'check_in']),
+  source: z.enum(['quick_action', 'questionnaire', 'check_in', 'quick_log']),
   daySessionId: z.string().optional(),
   categoryId: z.string().optional(),
   questionId: z.string().optional(),

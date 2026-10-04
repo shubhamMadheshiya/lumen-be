@@ -9,7 +9,7 @@ const FieldValueSchema = new Schema({
 }, { _id: false });
 
 const AnswerSchema = new Schema({
-  optionId:           { type: Schema.Types.ObjectId, required: true },
+  optionId:           { type: String, required: true },
   optionLabelSnapshot:{ type: String, required: true }, // de-normalised; survives option rename/archive
   values:             [FieldValueSchema],
   comment:            { type: String, maxlength: 1000 },
@@ -20,7 +20,7 @@ export interface ILogEntryDoc extends Document {
   userId: mongoose.Types.ObjectId;
   clientId: string;                // UUID from the device — used for dedup on sync
   daySessionId?: mongoose.Types.ObjectId;
-  source: 'quick_action' | 'questionnaire' | 'check_in' | 'reminder' | 'activity';
+  source: 'quick_action' | 'questionnaire' | 'check_in' | 'reminder' | 'activity' | 'quick_log';
   categoryId?: mongoose.Types.ObjectId;
   questionId?: mongoose.Types.ObjectId;
   questionVersion?: number;
@@ -31,7 +31,7 @@ export interface ILogEntryDoc extends Document {
   loggedAt: Date;
   timezone: string;
   answers: Array<{
-    optionId: mongoose.Types.ObjectId;
+    optionId: string;
     optionLabelSnapshot: string;
     values: Array<{ fieldKey: string; dataType: string; value: unknown; unit?: string; canonicalValue?: number }>;
     comment?: string;
@@ -49,7 +49,7 @@ const LogEntrySchema = new Schema<ILogEntryDoc>(
     userId:          { type: Schema.Types.ObjectId, ref: 'User', required: true },
     clientId:        { type: String, required: true },
     daySessionId:    { type: Schema.Types.ObjectId, ref: 'DaySession' },
-    source:          { type: String, enum: ['quick_action', 'questionnaire', 'check_in', 'reminder', 'activity'], required: true },
+    source:          { type: String, enum: ['quick_action', 'questionnaire', 'check_in', 'reminder', 'activity', 'quick_log'], required: true },
     categoryId:      { type: Schema.Types.ObjectId, ref: 'Category' },
     questionId:      { type: Schema.Types.ObjectId, ref: 'Question' },
     questionVersion: { type: Number },
