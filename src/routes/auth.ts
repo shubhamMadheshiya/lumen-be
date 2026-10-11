@@ -27,34 +27,9 @@ const googleClient = new OAuth2Client();
 
 export const authRouter = Router();
 
-// POST /auth/register
-authRouter.post('/register', validate(RegisterSchema), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { email, password, name } = req.body as { email: string; password: string; name: string };
-
-    const exists = await User.findOne({ email });
-    if (exists) throw AppError.conflict('An account with this email already exists');
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({ email, passwordHash, name });
-
-    // Apply the 'general' starter bundle so the user doesn't start empty
-    await applyConditionBundle(user.id as string, 'general');
-
-    const accessToken  = signAccessToken(user.id as string);
-    const refreshToken = signRefreshToken(user.id as string);
-
-    res.status(201).json({
-      success: true,
-      data: {
-        accessToken,
-        refreshToken,
-        user: { _id: user._id, email: user.email, name: user.name },
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
+// POST /auth/register — Direct registration disabled: all users must enter via Google
+authRouter.post('/register', (_req: Request, _res: Response, next: NextFunction) => {
+  next(AppError.forbidden('Direct account creation is disabled. Please sign in with Google to create your account.'));
 });
 
 // POST /auth/login
@@ -66,21 +41,28 @@ authRouter.post('/login', validate(LoginSchema), async (req: Request, res: Respo
     if (!user) throw AppError.unauthorized('Invalid email or password');
 
     if (!user.passwordHash) {
-      throw AppError.badRequest('This account was registered with Google. Please use "Continue with Google" to sign in.');
+      throw AppError.badRequest('This account was registered with Google and has no password configured. Please use "Continue with Google" to sign in.');
     }
 
     const valid = await user.comparePassword(password);
     if (!valid) throw AppError.unauthorized('Invalid email or password');
 
-    const accessToken  = signAccessToken(user.id as string);
-    const refreshToken = signRefreshToken(user.id as string);
+    const accessToken  = signAccessToken(user.id as string, 'password');
+    const refreshToken = signRefreshToken(user.id as string, 'password');
 
     res.json({
       success: true,
       data: {
         accessToken,
         refreshToken,
-        user: { _id: user._id, email: user.email, name: user.name, preferences: user.preferences },
+        user: {
+          _id: user._id,
+          email: user.email,
+          name: user.name,
+          preferences: user.preferences,
+          hasPassword: true,
+          authMethod: 'password',
+        },
       },
     });
   } catch (err) {
@@ -94,12 +76,12 @@ authRouter.post('/refresh', async (req: Request, res: Response, next: NextFuncti
     const { refreshToken } = req.body as { refreshToken?: string };
     if (!refreshToken) throw AppError.badRequest('refreshToken required');
 
-    const { sub } = verifyRefreshToken(refreshToken);
+    const { sub, authMethod = 'password' } = verifyRefreshToken(refreshToken);
     const user = await User.findById(sub);
     if (!user) throw AppError.unauthorized('User not found');
 
-    const newAccessToken  = signAccessToken(sub);
-    const newRefreshToken = signRefreshToken(sub);
+    const newAccessToken  = signAccessToken(sub, authMethod);
+    const newRefreshToken = signRefreshToken(sub, authMethod);
 
     res.json({ success: true, data: { accessToken: newAccessToken, refreshToken: newRefreshToken } });
   } catch (err) {
@@ -123,12 +105,12 @@ authRouter.post('/google', async (req: Request, res: Response, next: NextFunctio
 
     const { sub: googleId, email, name = email.split('@')[0] } = payload;
 
-    // Find by googleId first, then fall back to email (links existing email/password accounts)
-    let user = await User.findOne({ googleId }).select('+googleId') as InstanceType<typeof User> | null;
+    // Find by googleId first, then fall back to email (links existing email accounts)
+    let user = await User.findOne({ googleId }).select('+googleId +passwordHash') as InstanceType<typeof User> | null;
     if (!user) {
-      user = await User.findOne({ email: email.toLowerCase() }).select('+googleId') as InstanceType<typeof User> | null;
+      user = await User.findOne({ email: email.toLowerCase() }).select('+googleId +passwordHash') as InstanceType<typeof User> | null;
       if (user) {
-        // Link Google to the existing email/password account
+        // Link Google to the existing account
         user.googleId = googleId;
         await user.save();
       }
@@ -141,16 +123,51 @@ authRouter.post('/google', async (req: Request, res: Response, next: NextFunctio
       isNew = true;
     }
 
-    const accessToken  = signAccessToken(user.id as string);
-    const refreshToken = signRefreshToken(user.id as string);
+    const accessToken  = signAccessToken(user.id as string, 'google');
+    const refreshToken = signRefreshToken(user.id as string, 'google');
 
     res.status(isNew ? 201 : 200).json({
       success: true,
       data: {
         accessToken,
         refreshToken,
-        user: { _id: user._id, email: user.email, name: user.name, preferences: user.preferences },
+        user: {
+          _id: user._id,
+          email: user.email,
+          name: user.name,
+          preferences: user.preferences,
+          hasPassword: Boolean(user.passwordHash),
+          authMethod: 'google',
+        },
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /auth/set-password — set or reset account password (ONLY permitted when authenticated via Google)
+authRouter.post('/set-password', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.authMethod !== 'google') {
+      throw AppError.forbidden('Password can only be set or changed when signed in with Google. Please re-authenticate with Google.');
+    }
+
+    const { password } = req.body as { password?: string };
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      throw AppError.badRequest('Password must be at least 8 characters long');
+    }
+
+    const user = await User.findById(req.userId).select('+passwordHash');
+    if (!user) throw AppError.notFound('User not found');
+
+    user.passwordHash = await bcrypt.hash(password, 12);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Password saved successfully',
+      data: { hasPassword: true },
     });
   } catch (err) {
     next(err);
@@ -165,7 +182,7 @@ authRouter.post('/logout', authenticate, (req: Request, res: Response) => {
 // GET /auth/me — get current user profile details
 authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findById(req.userId).select('+passwordHash');
     if (!user) throw AppError.notFound('User not found');
 
     res.json({
@@ -180,6 +197,8 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
         gender: user.gender,
         preferences: user.preferences,
         configVersion: user.configVersion,
+        hasPassword: Boolean(user.passwordHash),
+        authMethod: req.authMethod || 'password',
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },

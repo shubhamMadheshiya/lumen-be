@@ -4,11 +4,13 @@ import { config } from '../config';
 
 export interface AuthRequest extends Request {
   userId?: string;
+  authMethod?: 'google' | 'password';
 }
 
 interface AccessPayload {
   sub: string;
   type: 'access';
+  authMethod?: 'google' | 'password';
   iat: number;
   exp: number;
 }
@@ -28,6 +30,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
       return;
     }
     req.userId = payload.sub;
+    req.authMethod = payload.authMethod || 'password';
     next();
   } catch {
     res.status(401).json({ success: false, message: 'Invalid or expired access token' });

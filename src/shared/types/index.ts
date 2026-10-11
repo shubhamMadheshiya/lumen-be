@@ -454,6 +454,8 @@ export interface IUser {
   preferences: UserPreferences;
   consentAcceptedAt?: string;
   configVersion: number;
+  hasPassword?: boolean;
+  authMethod?: 'google' | 'password';
   createdAt: string;
   updatedAt: string;
 }
