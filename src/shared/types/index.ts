@@ -26,7 +26,10 @@ export type DisplayAs =
   | 'image-grid'
   | 'toggle'
   | 'camera'
-  | 'body-map';
+  | 'body-map'
+  | 'joint-map-3d'
+  | 'chest-map'
+  | 'body-map-3d';
 
 export type SelectionType = 'single' | 'multiple';
 export type CaptureTime = 'none' | 'auto_now' | 'user_picks';
@@ -467,6 +470,7 @@ export interface IUser {
   consentAcceptedAt?: string;
   configVersion: number;
   hasPassword?: boolean;
+  hasPhotoPin?: boolean;
   authMethod?: 'google' | 'password';
   createdAt: string;
   updatedAt: string;

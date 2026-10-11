@@ -10,6 +10,7 @@ export const DataTypeEnum = z.enum([
 export const DisplayAsEnum = z.enum([
   'slider', 'stepper', 'chips', 'dropdown', 'text',
   'picker', 'color-swatch', 'image-grid', 'toggle', 'camera', 'body-map',
+  'joint-map-3d', 'chest-map', 'body-map-3d',
 ]);
 
 export const EnumValueSchema = z.object({

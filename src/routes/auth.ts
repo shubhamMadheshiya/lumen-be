@@ -37,7 +37,7 @@ authRouter.post('/login', validate(LoginSchema), async (req: Request, res: Respo
   try {
     const { email, password } = req.body as { email: string; password: string };
 
-    const user = await User.findOne({ email }).select('+passwordHash');
+    const user = await User.findOne({ email }).select('+passwordHash +photoPinHash');
     if (!user) throw AppError.unauthorized('Invalid email or password');
 
     if (!user.passwordHash) {
@@ -61,6 +61,7 @@ authRouter.post('/login', validate(LoginSchema), async (req: Request, res: Respo
           name: user.name,
           preferences: user.preferences,
           hasPassword: true,
+          hasPhotoPin: Boolean(user.photoPinHash),
           authMethod: 'password',
         },
       },
@@ -106,9 +107,9 @@ authRouter.post('/google', async (req: Request, res: Response, next: NextFunctio
     const { sub: googleId, email, name = email.split('@')[0] } = payload;
 
     // Find by googleId first, then fall back to email (links existing email accounts)
-    let user = await User.findOne({ googleId }).select('+googleId +passwordHash') as InstanceType<typeof User> | null;
+    let user = await User.findOne({ googleId }).select('+googleId +passwordHash +photoPinHash') as InstanceType<typeof User> | null;
     if (!user) {
-      user = await User.findOne({ email: email.toLowerCase() }).select('+googleId +passwordHash') as InstanceType<typeof User> | null;
+      user = await User.findOne({ email: email.toLowerCase() }).select('+googleId +passwordHash +photoPinHash') as InstanceType<typeof User> | null;
       if (user) {
         // Link Google to the existing account
         user.googleId = googleId;
@@ -137,6 +138,7 @@ authRouter.post('/google', async (req: Request, res: Response, next: NextFunctio
           name: user.name,
           preferences: user.preferences,
           hasPassword: Boolean(user.passwordHash),
+          hasPhotoPin: Boolean(user.photoPinHash),
           authMethod: 'google',
         },
       },
@@ -174,6 +176,58 @@ authRouter.post('/set-password', authenticate, async (req: AuthRequest, res: Res
   }
 });
 
+// POST /auth/photo-pin — set or reset sensitive photo PIN (ONLY permitted when authenticated via Google)
+authRouter.post('/photo-pin', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.authMethod !== 'google') {
+      throw AppError.forbidden('Photo PIN can only be set or changed when signed in with Google. Please re-authenticate with Google.');
+    }
+
+    const { pin } = req.body as { pin?: string };
+    if (!pin || typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
+      throw AppError.badRequest('Photo PIN must be exactly 4 numeric digits');
+    }
+
+    const user = await User.findById(req.userId).select('+photoPinHash');
+    if (!user) throw AppError.notFound('User not found');
+
+    user.photoPinHash = await bcrypt.hash(pin, 12);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Photo PIN saved successfully',
+      data: { hasPhotoPin: true },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /auth/verify-photo-pin — verify candidate Photo PIN
+authRouter.post('/verify-photo-pin', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { pin } = req.body as { pin?: string };
+    if (!pin || typeof pin !== 'string') {
+      throw AppError.badRequest('PIN is required');
+    }
+
+    const user = await User.findById(req.userId).select('+photoPinHash');
+    if (!user) throw AppError.notFound('User not found');
+
+    if (!user.photoPinHash) {
+      // No PIN configured
+      res.json({ success: true, valid: true, isConfigured: false });
+      return;
+    }
+
+    const isValid = await bcrypt.compare(pin, user.photoPinHash);
+    res.json({ success: true, valid: isValid, isConfigured: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /auth/logout   (client should delete tokens on its side; no server-side blacklist in v1)
 authRouter.post('/logout', authenticate, (req: Request, res: Response) => {
   res.json({ success: true, message: 'Logged out' });
@@ -182,7 +236,7 @@ authRouter.post('/logout', authenticate, (req: Request, res: Response) => {
 // GET /auth/me — get current user profile details
 authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const user = await User.findById(req.userId).select('+passwordHash');
+    const user = await User.findById(req.userId).select('+passwordHash +photoPinHash');
     if (!user) throw AppError.notFound('User not found');
 
     res.json({
@@ -198,6 +252,7 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
         preferences: user.preferences,
         configVersion: user.configVersion,
         hasPassword: Boolean(user.passwordHash),
+        hasPhotoPin: Boolean(user.photoPinHash),
         authMethod: req.authMethod || 'password',
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
@@ -261,9 +316,12 @@ authRouter.patch('/me', authenticate, validate(UpdateProfileSchema), async (req:
   }
 });
 
-// DELETE /me — permanent account + data deletion
+// DELETE /me — permanent account + data deletion (ONLY permitted for Primary User authenticated via Google)
 authRouter.delete('/me', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    if (req.authMethod !== 'google') {
+      throw AppError.forbidden('Account deletion is restricted to the Primary Account Owner. Please sign in with Google to delete this account.');
+    }
     const uid = req.userId!;
     await Promise.all([
       User.deleteOne({ _id: uid }),

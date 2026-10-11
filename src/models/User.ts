@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 export interface IUserDoc extends Document {
   email: string;
   passwordHash?: string;
+  photoPinHash?: string;
   googleId?: string;
   name: string;
   conditions: string[];
@@ -28,6 +29,7 @@ const UserSchema = new Schema<IUserDoc>(
   {
     email:        { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: false, select: false },
+    photoPinHash: { type: String, required: false, select: false },
     googleId:     { type: String, select: false },
     name:         { type: String, required: true, trim: true, maxlength: 80 },
     conditions:   [{ type: String }],
