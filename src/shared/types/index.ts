@@ -191,6 +191,17 @@ export interface Answer {
   otherText?: string;
 }
 
+export interface ILogLocation {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  name?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  formattedAddress?: string;
+}
+
 export interface ILogEntry {
   _id: string;
   userId: string;
@@ -206,6 +217,7 @@ export interface ILogEntry {
   timezone: string;
   answers: Answer[];
   mediaIds: string[];
+  location?: ILogLocation;
   note?: string;
   deletedAt?: string;
   createdAt: string;

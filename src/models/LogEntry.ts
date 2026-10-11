@@ -16,6 +16,17 @@ const AnswerSchema = new Schema({
   otherText:          { type: String, maxlength: 500 },
 }, { _id: false });
 
+const LocationSchema = new Schema({
+  latitude:         { type: Number, required: true },
+  longitude:        { type: Number, required: true },
+  accuracy:         { type: Number },
+  name:             { type: String, maxlength: 200 },
+  city:             { type: String, maxlength: 100 },
+  region:           { type: String, maxlength: 100 },
+  country:          { type: String, maxlength: 100 },
+  formattedAddress: { type: String, maxlength: 300 },
+}, { _id: false });
+
 export interface ILogEntryDoc extends Document {
   userId: mongoose.Types.ObjectId;
   clientId: string;                // UUID from the device — used for dedup on sync
@@ -38,6 +49,16 @@ export interface ILogEntryDoc extends Document {
     otherText?: string;
   }>;
   mediaIds: mongoose.Types.ObjectId[];
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    name?: string;
+    city?: string;
+    region?: string;
+    country?: string;
+    formattedAddress?: string;
+  };
   note?: string;
   deletedAt?: Date;
   createdAt: Date;
@@ -61,6 +82,7 @@ const LogEntrySchema = new Schema<ILogEntryDoc>(
     timezone:        { type: String, required: true },
     answers:         [AnswerSchema],
     mediaIds:        [{ type: Schema.Types.ObjectId, ref: 'Media' }],
+    location:        { type: LocationSchema },
     note:            { type: String, maxlength: 2000 },
     deletedAt:       { type: Date },
   },

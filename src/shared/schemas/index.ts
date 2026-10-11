@@ -157,6 +157,17 @@ export const AnswerSchema = z.object({
   otherText: z.string().max(500).optional(),
 });
 
+export const LogLocationSchema = z.object({
+  latitude: z.number(),
+  longitude: z.number(),
+  accuracy: z.number().optional(),
+  name: z.string().optional(),
+  city: z.string().optional(),
+  region: z.string().optional(),
+  country: z.string().optional(),
+  formattedAddress: z.string().optional(),
+});
+
 export const CreateLogEntrySchema = z.object({
   clientId: z.string().uuid(),
   source: z.enum(['quick_action', 'questionnaire', 'check_in', 'quick_log']),
@@ -169,6 +180,7 @@ export const CreateLogEntrySchema = z.object({
   timezone: z.string(),
   answers: z.array(AnswerSchema).default([]),
   mediaIds: z.array(z.string()).default([]),
+  location: LogLocationSchema.optional(),
   note: z.string().max(2000).optional(),
 });
 
