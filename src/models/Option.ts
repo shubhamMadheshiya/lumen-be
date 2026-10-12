@@ -30,8 +30,24 @@ const FieldDefinitionSchema = new Schema({
   helpText:     { type: String },
   displayAs:    {
     type: String,
-    enum: ['slider','stepper','chips','dropdown','text','picker','color-swatch','image-grid','toggle','camera','body-map'],
+    enum: [
+      'slider',
+      'stepper',
+      'chips',
+      'dropdown',
+      'text',
+      'picker',
+      'color-swatch',
+      'image-grid',
+      'toggle',
+      'camera',
+      'body-map',
+      'joint-map-3d',
+      'chest-map',
+      'body-map-3d',
+    ],
   },
+  sensitive:    { type: Boolean, default: false },
 }, { _id: false });
 
 // ── IOptionDoc ────────────────────────────────
@@ -59,6 +75,7 @@ export interface IOptionDoc extends Document {
     placeholder?: string;
     helpText?: string;
     displayAs?: string;
+    sensitive?: boolean;
   }>;
   order: number;
   isActive: boolean;
