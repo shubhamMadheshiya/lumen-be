@@ -265,8 +265,8 @@ export const ApplyTemplatesSchema = z.object({
 // ────────── Reports ──────────
 
 export const ReportRequestSchema = z.object({
-  from: z.string().datetime(),
-  to: z.string().datetime(),
+  from: z.string().min(1),
+  to: z.string().min(1),
   format: z.enum(['pdf', 'csv', 'json']).default('pdf'),
   categoryIds: z.array(z.string()).optional(),
   includeImages: z.boolean().default(false),
