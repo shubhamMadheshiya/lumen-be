@@ -14,6 +14,9 @@ import { Category } from '../models/Category';
 import { Question } from '../models/Question';
 import { Option } from '../models/Option';
 import { QuickAction } from '../models/QuickAction';
+import { User } from '../models/User';
+import { CommunityTemplate } from '../models/CommunityTemplate';
+
 
 async function applyCategory(
   userId: string,
@@ -145,3 +148,108 @@ export async function applyTemplateKeys(userId: string, templateKeys: string[]):
 
   return { applied, skipped };
 }
+
+/**
+ * Installs a community template into a user's configuration.
+ * Creates brand-new independent Category, Question, and Option records
+ * without overriding or modifying any existing user categories or logs.
+ */
+export async function installCommunityTemplate(
+  userId: string,
+  templateId: string,
+): Promise<{ categoriesInstalled: number; quickActionsInstalled: number; templateTitle: string }> {
+  const template = await CommunityTemplate.findById(templateId);
+  if (!template) {
+    throw new Error('Community template not found');
+  }
+  if (template.status === 'hidden_flagged') {
+    throw new Error('This template is currently flagged and unavailable for installation');
+  }
+
+  const uid = new mongoose.Types.ObjectId(userId);
+  const baseCategoryOrder = await Category.countDocuments({ userId: uid });
+  let categoriesInstalled = 0;
+  let quickActionsInstalled = 0;
+
+  for (let catIdx = 0; catIdx < template.categories.length; catIdx++) {
+    const catTmpl = template.categories[catIdx];
+
+    const category = await Category.create({
+      userId: uid,
+      name: catTmpl.name,
+      icon: catTmpl.icon || '📝',
+      color: catTmpl.color || '#4A90E2',
+      role: catTmpl.role,
+      order: baseCategoryOrder + catIdx,
+      isActive: true,
+    });
+    categoriesInstalled++;
+
+    for (let qIdx = 0; qIdx < (catTmpl.questions || []).length; qIdx++) {
+      const qTmpl = catTmpl.questions[qIdx];
+      const question = await Question.create({
+        userId: uid,
+        categoryId: category._id,
+        title: qTmpl.title,
+        helpText: qTmpl.helpText,
+        icon: qTmpl.icon,
+        selectionType: qTmpl.selectionType || 'single',
+        allowOther: qTmpl.allowOther ?? false,
+        required: qTmpl.required ?? false,
+        frequency: qTmpl.frequency || 'anytime',
+        order: qIdx,
+        version: 1,
+        isActive: true,
+      });
+
+      for (let oIdx = 0; oIdx < (qTmpl.options || []).length; oIdx++) {
+        const oTmpl = qTmpl.options[oIdx];
+        await Option.create({
+          userId: uid,
+          questionId: question._id,
+          label: oTmpl.label,
+          icon: oTmpl.icon,
+          color: oTmpl.color,
+          allowComment: oTmpl.allowComment ?? false,
+          captureTime: oTmpl.captureTime || 'none',
+          fields: oTmpl.fields || [],
+          order: oIdx,
+          isActive: true,
+        });
+      }
+    }
+  }
+
+  if (template.quickActions && template.quickActions.length > 0) {
+    const baseQAOrder = await QuickAction.countDocuments({ userId: uid });
+    for (let qaIdx = 0; qaIdx < template.quickActions.length; qaIdx++) {
+      const qa = template.quickActions[qaIdx];
+      await QuickAction.create({
+        userId: uid,
+        label: qa.label,
+        icon: qa.icon,
+        color: qa.color,
+        mode: qa.mode,
+        defaultValue: qa.defaultValue,
+        unit: qa.unit,
+        dailyGoal: qa.dailyGoal,
+        order: baseQAOrder + qaIdx,
+        isVisible: true,
+      });
+      quickActionsInstalled++;
+    }
+  }
+
+  // Increment install count on template
+  await CommunityTemplate.findByIdAndUpdate(templateId, { $inc: { installCount: 1 } });
+
+  // Bump user configVersion so frontend cache refreshes
+  await User.findByIdAndUpdate(uid, { $inc: { configVersion: 1 } });
+
+  return {
+    categoriesInstalled,
+    quickActionsInstalled,
+    templateTitle: template.title,
+  };
+}
+

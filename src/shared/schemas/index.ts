@@ -277,3 +277,57 @@ export const ReportRequestSchema = z.object({
 export const ReorderSchema = z.object({
   ids: z.array(z.string()).min(1),
 });
+
+// ────────── Community Templates ──────────
+
+export const CreateCommunityTemplateSchema = z.object({
+  title: z.string().min(3).max(100),
+  description: z.string().min(5).max(1000),
+  conditionTags: z.array(z.string().min(1).max(40)).min(1).max(10),
+  icon: z.string().min(1).max(20).default('📋'),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#4A90E2'),
+  isAnonymous: z.boolean().default(true),
+  categories: z.array(
+    z.object({
+      name: z.string().min(1).max(80),
+      icon: z.string().min(1).max(20).default('📝'),
+      color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#4A90E2'),
+      role: z.enum(['trigger_candidate', 'symptom', 'context']),
+      questions: z.array(
+        z.object({
+          title: z.string().min(1).max(150),
+          helpText: z.string().max(300).optional(),
+          icon: z.string().max(20).optional(),
+          selectionType: z.enum(['single', 'multiple']).default('single'),
+          allowOther: z.boolean().default(false),
+          required: z.boolean().default(false),
+          frequency: z.enum(['anytime', 'once_per_day', 'per_meal', 'morning', 'evening']).default('anytime'),
+          options: z.array(
+            z.object({
+              label: z.string().min(1).max(100),
+              icon: z.string().max(20).optional(),
+              color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+              allowComment: z.boolean().default(false),
+              captureTime: z.enum(['none', 'auto_now', 'user_picks']).default('none'),
+              fields: z.array(z.record(z.any())).optional(),
+            })
+          ).default([]),
+        })
+      ).default([]),
+    })
+  ).min(1),
+  quickActions: z.array(
+    z.object({
+      label: z.string().min(1).max(80),
+      icon: z.string().min(1).max(20),
+      color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+      mode: z.enum(['counter', 'timer', 'toggle']),
+      defaultValue: z.number().optional(),
+      unit: z.string().optional(),
+      dailyGoal: z.number().optional(),
+    })
+  ).optional().default([]),
+});
+
+export type CreateCommunityTemplateDto = z.infer<typeof CreateCommunityTemplateSchema>;
+

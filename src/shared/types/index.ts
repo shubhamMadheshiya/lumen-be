@@ -486,3 +486,80 @@ export interface UserConfig {
   quickActions: IQuickAction[];
   customUnits: ICustomUnit[];
 }
+
+// ────────── Community Templates ──────────
+
+export interface CommunityTemplateField {
+  key: string;
+  label: string;
+  dataType: string;
+  unit?: string;
+  allowedUnits?: string[];
+  min?: number;
+  max?: number;
+  step?: number;
+  enumValues?: Array<{ value: string; label: string; icon?: string; color?: string; description?: string }>;
+  required?: boolean;
+  placeholder?: string;
+  displayAs?: string;
+  helpText?: string;
+}
+
+export interface CommunityTemplateOption {
+  label: string;
+  icon?: string;
+  color?: string;
+  allowComment?: boolean;
+  captureTime?: 'none' | 'auto_now' | 'user_picks';
+  fields?: CommunityTemplateField[];
+}
+
+export interface CommunityTemplateQuestion {
+  title: string;
+  helpText?: string;
+  icon?: string;
+  selectionType: 'single' | 'multiple';
+  allowOther?: boolean;
+  required?: boolean;
+  frequency?: 'anytime' | 'once_per_day' | 'per_meal' | 'morning' | 'evening';
+  options: CommunityTemplateOption[];
+}
+
+export interface CommunityTemplateCategory {
+  name: string;
+  icon: string;
+  color: string;
+  role: 'trigger_candidate' | 'symptom' | 'context';
+  questions: CommunityTemplateQuestion[];
+}
+
+export interface CommunityTemplateQuickAction {
+  label: string;
+  icon: string;
+  color: string;
+  mode: 'counter' | 'timer' | 'toggle';
+  defaultValue?: number;
+  unit?: string;
+  dailyGoal?: number;
+}
+
+export interface ICommunityTemplate {
+  _id: string;
+  creatorId: string;
+  creatorDisplayName: string;
+  isAnonymous: boolean;
+  title: string;
+  description: string;
+  conditionTags: string[];
+  icon: string;
+  color: string;
+  categories: CommunityTemplateCategory[];
+  quickActions?: CommunityTemplateQuickAction[];
+  installCount: number;
+  likesCount: number;
+  isVerified: boolean;
+  flagCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
