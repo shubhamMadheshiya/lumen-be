@@ -11,6 +11,7 @@ export function validate(schema: ZodSchema, target: Target = 'body') {
         field: e.path.join('.'),
         message: e.message,
       }));
+      console.error(`[VALIDATION ERROR] ${req.method} ${req.originalUrl}:`, JSON.stringify(errors, null, 2));
       res.status(400).json({ success: false, message: 'Validation error', errors });
       return;
     }

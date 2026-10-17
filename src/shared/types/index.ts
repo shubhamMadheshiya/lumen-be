@@ -139,8 +139,8 @@ export interface IQuickAction {
   defaultValue?: number;
   unit?: string;
   dailyGoal?: number;
-  linkedQuestionId?: string;
-  linkedOptionId?: string;
+  linkedQuestionId?: string | null;
+  linkedOptionId?: string | null;
   order: number;
   isVisible: boolean;
   archivedAt?: string;

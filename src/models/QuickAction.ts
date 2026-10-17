@@ -9,8 +9,8 @@ export interface IQuickActionDoc extends Document {
   defaultValue?: number;
   unit?: string;
   dailyGoal?: number;
-  linkedQuestionId?: mongoose.Types.ObjectId;
-  linkedOptionId?: mongoose.Types.ObjectId;
+  linkedQuestionId?: mongoose.Types.ObjectId | null;
+  linkedOptionId?: mongoose.Types.ObjectId | null;
   order: number;
   isVisible: boolean;
   archivedAt?: Date;

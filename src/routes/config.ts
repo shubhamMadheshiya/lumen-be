@@ -77,6 +77,154 @@ configRouter.get('/export', async (req: AuthRequest, res: Response, next: NextFu
   } catch (err) { next(err); }
 });
 
+configRouter.post('/import', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    const payload = req.body?.data || req.body || {};
+    const { categories = [], questions = [], options = [], quickActions = [], customUnits = [] } = payload;
+
+    const categoryIdMap = new Map<string, mongoose.Types.ObjectId>();
+    const questionIdMap = new Map<string, mongoose.Types.ObjectId>();
+
+    // 1. Categories
+    for (const cat of categories) {
+      const oldId = String(cat._id || '');
+      let existing = null;
+      if (cat.templateKey) {
+        existing = await Category.findOne({ userId, templateKey: cat.templateKey });
+      }
+      if (!existing && cat.name) {
+        existing = await Category.findOne({ userId, name: cat.name });
+      }
+
+      if (existing) {
+        if (oldId) categoryIdMap.set(oldId, existing._id as mongoose.Types.ObjectId);
+      } else {
+        const newCat = await Category.create({
+          userId,
+          name: cat.name,
+          icon: cat.icon,
+          color: cat.color,
+          role: cat.role,
+          order: cat.order ?? 0,
+          isActive: cat.isActive ?? true,
+          templateKey: cat.templateKey,
+        });
+        if (oldId) categoryIdMap.set(oldId, newCat._id as mongoose.Types.ObjectId);
+      }
+    }
+
+    // 2. Questions
+    for (const q of questions) {
+      const oldId = String(q._id || '');
+      const mappedCatId = q.categoryId ? categoryIdMap.get(String(q.categoryId)) : undefined;
+      const targetCatId = mappedCatId || q.categoryId;
+
+      let existing = null;
+      if (q.templateKey) {
+        existing = await Question.findOne({ userId, templateKey: q.templateKey });
+      }
+      if (!existing && targetCatId && q.title) {
+        existing = await Question.findOne({ userId, categoryId: targetCatId, title: q.title });
+      }
+
+      if (existing) {
+        if (oldId) questionIdMap.set(oldId, existing._id as mongoose.Types.ObjectId);
+      } else if (targetCatId) {
+        const newQ = await Question.create({
+          userId,
+          categoryId: targetCatId,
+          title: q.title,
+          helpText: q.helpText,
+          icon: q.icon,
+          selectionType: q.selectionType ?? 'single',
+          allowOther: q.allowOther ?? false,
+          required: q.required ?? false,
+          frequency: q.frequency ?? 'unlimited',
+          order: q.order ?? 0,
+          version: q.version ?? 1,
+          isActive: q.isActive ?? true,
+          templateKey: q.templateKey,
+        });
+        if (oldId) questionIdMap.set(oldId, newQ._id as mongoose.Types.ObjectId);
+      }
+    }
+
+    // 3. Options
+    for (const opt of options) {
+      const mappedQId = opt.questionId ? questionIdMap.get(String(opt.questionId)) : undefined;
+      const targetQId = mappedQId || opt.questionId;
+
+      let existing = null;
+      if (opt.templateKey) {
+        existing = await Option.findOne({ userId, templateKey: opt.templateKey });
+      }
+      if (!existing && targetQId && opt.label) {
+        existing = await Option.findOne({ userId, questionId: targetQId, label: opt.label });
+      }
+
+      if (!existing && targetQId) {
+        await Option.create({
+          userId,
+          questionId: targetQId,
+          label: opt.label,
+          icon: opt.icon,
+          color: opt.color,
+          allowComment: opt.allowComment ?? false,
+          captureTime: opt.captureTime ?? 'none',
+          fields: opt.fields ?? [],
+          order: opt.order ?? 0,
+          isActive: opt.isActive ?? true,
+          templateKey: opt.templateKey,
+        });
+      }
+    }
+
+    // 4. Quick Actions
+    for (const qa of quickActions) {
+      let existing = null;
+      if (qa.templateKey) {
+        existing = await QuickAction.findOne({ userId, templateKey: qa.templateKey });
+      }
+      if (!existing && qa.label) {
+        existing = await QuickAction.findOne({ userId, label: qa.label });
+      }
+
+      if (!existing) {
+        await QuickAction.create({
+          userId,
+          label: qa.label,
+          icon: qa.icon,
+          color: qa.color,
+          mode: qa.mode ?? 'tap_to_log',
+          defaultValue: qa.defaultValue,
+          unit: qa.unit,
+          dailyGoal: qa.dailyGoal,
+          order: qa.order ?? 0,
+          isVisible: qa.isVisible ?? true,
+          templateKey: qa.templateKey,
+        });
+      }
+    }
+
+    // 5. Custom Units
+    for (const unit of customUnits) {
+      const existing = await CustomUnit.findOne({ userId, symbol: unit.symbol });
+      if (!existing && unit.name && unit.symbol) {
+        await CustomUnit.create({
+          userId,
+          name: unit.name,
+          symbol: unit.symbol,
+          type: unit.type,
+        });
+      }
+    }
+
+    await bumpConfig(req.userId!);
+    res.json({ success: true, message: 'Config imported successfully' });
+  } catch (err) { next(err); }
+});
+
 // ═══════════════════════════════════════════════
 //  CATEGORIES
 // ═══════════════════════════════════════════════
