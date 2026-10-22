@@ -19,6 +19,9 @@ import { insightsRouter } from './routes/insights';
 import { reportsRouter } from './routes/reports';
 import { remindersRouter } from './routes/reminders';
 import { activitySessionsRouter } from './routes/activitySessions';
+import { tasksRouter } from './routes/tasks';
+import { notesRouter } from './routes/notes';
+import { communityChatRouter } from './routes/communityChat';
 
 export function createApp(): Application {
   const app = express();
@@ -92,6 +95,9 @@ export function createApp(): Application {
   app.use(`${v1}/reports`,           reportsRouter);
   app.use(`${v1}/reminders`,         remindersRouter);
   app.use(`${v1}/activity-sessions`, activitySessionsRouter);
+  app.use(`${v1}/tasks`,             tasksRouter);
+  app.use(`${v1}/notes`,             notesRouter);
+  app.use(`${v1}/community`,         communityChatRouter);
 
   // ── 404 ───────────────────────────────────────
   app.use((_req, res) => {

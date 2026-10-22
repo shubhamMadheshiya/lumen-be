@@ -563,3 +563,169 @@ export interface ICommunityTemplate {
   updatedAt: string;
 }
 
+// ────────── Tasks & To-Do (Microsoft To Do style) ──────────
+
+export type TaskEnergyCost = 'gentle' | 'moderate' | 'demanding';
+
+export interface ITaskStep {
+  id: string;
+  title: string;
+  completed: boolean;
+  completedAt?: string;
+}
+
+export interface ITaskRepeat {
+  frequency: 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'custom';
+  interval?: number;
+  daysOfWeek?: number[];
+}
+
+export interface ITask {
+  _id: string;
+  userId: string;
+  title: string;
+  notes?: string;
+  isCompleted: boolean;
+  completedAt?: string;
+  isImportant: boolean;
+  inMyDay: boolean;
+  myDayDate?: string;
+  dueDate?: string;
+  reminderTime?: string;
+  repeat?: ITaskRepeat;
+  energyCost?: TaskEnergyCost;
+  listId?: string;
+  steps: ITaskStep[];
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ITaskList {
+  _id: string;
+  userId: string;
+  name: string;
+  icon: string;
+  color: string;
+  sortOrder: number;
+  isDefault?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ────────── Notes & Knowledge Base (Notion style) ──────────
+
+export type NoteBlockType =
+  | 'paragraph'
+  | 'heading_1'
+  | 'heading_2'
+  | 'heading_3'
+  | 'todo'
+  | 'bullet_list'
+  | 'numbered_list'
+  | 'toggle'
+  | 'callout'
+  | 'quote'
+  | 'divider'
+  | 'image';
+
+export interface INoteBlock {
+  id: string;
+  type: NoteBlockType;
+  content: string;
+  completed?: boolean;
+  calloutIcon?: string;
+  calloutColor?: string;
+  isCollapsed?: boolean;
+  children?: INoteBlock[];
+  imageUrl?: string;
+}
+
+export interface INote {
+  _id: string;
+  userId: string;
+  title: string;
+  icon?: string;
+  coverGradient?: string;
+  blocks: INoteBlock[];
+  parentNoteId?: string;
+  isPinned: boolean;
+  isArchived: boolean;
+  tags: string[];
+  linkedSymptomIds?: string[];
+  linkedMedicationIds?: string[];
+  linkedLogEntryIds?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ────────── Community Chat & Health Artifact Exchange ──────────
+
+export type CommunityEmbedType = 'note' | 'todo_list' | 'log_template' | 'photo';
+
+export interface INoteEmbedPayload {
+  noteId?: string;
+  title: string;
+  icon?: string;
+  coverGradient?: string;
+  tags: string[];
+  blocksPreview: Array<{ type: string; content: string }>;
+  blocksFull: INoteBlock[];
+}
+
+export interface ITodoEmbedPayload {
+  listName: string;
+  energyCost?: 'gentle' | 'moderate' | 'demanding';
+  tasks: Array<{
+    title: string;
+    energyCost?: 'gentle' | 'moderate' | 'demanding';
+    steps: Array<{ title: string }>;
+  }>;
+}
+
+export interface ILogTemplateEmbedPayload {
+  templateId?: string;
+  title: string;
+  conditionTags: string[];
+  categories: any[];
+  quickActions: any[];
+}
+
+export interface ICommunityMessage {
+  _id: string;
+  channelId: string;
+  senderId: string;
+  senderDisplayName: string;
+  senderAvatarEmoji?: string;
+  isAnonymous: boolean;
+  content: string;
+  embedType?: CommunityEmbedType;
+  embedData?: {
+    note?: INoteEmbedPayload;
+    todo?: ITodoEmbedPayload;
+    logTemplate?: ILogTemplateEmbedPayload;
+    photoUrl?: string;
+    caption?: string;
+  };
+  reactions: Record<string, number>;
+  userReactions?: string[];
+  cloneCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ICommunityChannel {
+  _id: string;
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+  topic: string;
+  memberCount: number;
+  messageCount: number;
+  isFeatured: boolean;
+  createdAt: string;
+}
+
+
