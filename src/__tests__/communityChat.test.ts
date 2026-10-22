@@ -5,6 +5,9 @@ import {
   CreateCommunityMessageSchema,
   ReactCommunityMessageSchema,
   CreateCommunityChannelSchema,
+  CreateForumPostSchema,
+  CreateCommunityServerSchema,
+  JoinCommunityServerSchema,
 } from '../shared/schemas';
 import { SEED_CHANNELS } from '../routes/communityChat';
 
@@ -123,4 +126,76 @@ describe('Server Models & Schemas: Community Chat & Health Artifact Exchange', (
     expect(message.senderDisplayName).toBe('Anonymous Spoonie');
     expect(message.cloneCount).toBe(3);
   });
+
+  it('validates Discord message with replyTo quote and role badges', () => {
+    const discordPayload = {
+      channelId: 'channel_pots_123',
+      content: 'Here is my answer to your MCAS compression question!',
+      isAnonymous: false,
+      senderRoleColor: '#8B5CF6',
+      senderRoleBadges: ['POTS Veteran', 'Peer Mentor'],
+      replyTo: {
+        messageId: 'parent_msg_999',
+        senderDisplayName: 'Alex_MECFS',
+        snippet: 'Does compression gear trigger MCAS rashes for anyone?',
+      },
+    };
+
+    const parsed = CreateCommunityMessageSchema.safeParse(discordPayload);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.senderRoleColor).toBe('#8B5CF6');
+      expect(parsed.data.senderRoleBadges).toContain('POTS Veteran');
+      expect(parsed.data.replyTo?.senderDisplayName).toBe('Alex_MECFS');
+      expect(parsed.data.replyTo?.snippet).toContain('MCAS rashes');
+    }
+  });
+
+  it('validates Discord Forum health story post and schema', () => {
+    const forumPayload = {
+      channelId: 'channel_recovery_789',
+      title: 'How Low-Dose Naltrexone & Pacing Cut My Heart Rate Spikes by 40 BPM',
+      tags: ['POTS', 'LDN', 'Remission'],
+      content: 'I was bedbound in 2023 due to severe orthostatic intolerance. After 6 months of pacing...',
+      isAnonymous: false,
+    };
+
+    const parsed = CreateForumPostSchema.safeParse(forumPayload);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.tags).toContain('POTS');
+      expect(parsed.data.title).toContain('Low-Dose Naltrexone');
+    }
+  });
+
+  it('validates custom Community Server creation schema', () => {
+    const serverPayload = {
+      name: 'EDS Zebra Lounge',
+      description: 'Support group for hypermobility spectrum and Ehlers-Danlos patients.',
+      icon: '🦓',
+      color: '#10B981',
+      conditionTags: ['EDS', 'HSD', 'Hypermobility'],
+      isPrivate: true,
+    };
+
+    const parsed = CreateCommunityServerSchema.safeParse(serverPayload);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.name).toBe('EDS Zebra Lounge');
+      expect(parsed.data.icon).toBe('🦓');
+      expect(parsed.data.isPrivate).toBe(true);
+      expect(parsed.data.conditionTags).toContain('EDS');
+    }
+  });
+
+  it('validates joining Community Server via 6-character invite code', () => {
+    const joinPayload = { inviteCode: 'ZEBR99' };
+    const parsed = JoinCommunityServerSchema.safeParse(joinPayload);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.inviteCode).toBe('ZEBR99');
+    }
+  });
 });
+
+

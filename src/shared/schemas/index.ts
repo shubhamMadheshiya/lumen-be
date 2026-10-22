@@ -467,6 +467,13 @@ export const CreateCommunityMessageSchema = z.object({
   content: z.string().max(3000).default(''),
   isAnonymous: z.boolean().default(false),
   senderAvatarEmoji: z.string().max(30).optional(),
+  senderRoleColor: z.string().optional(),
+  senderRoleBadges: z.array(z.string()).optional(),
+  replyTo: z.object({
+    messageId: z.string(),
+    senderDisplayName: z.string(),
+    snippet: z.string(),
+  }).optional(),
   embedType: CommunityEmbedTypeEnum.optional(),
   embedData: z.object({
     note: NoteEmbedPayloadSchema.optional(),
@@ -481,16 +488,55 @@ export const ReactCommunityMessageSchema = z.object({
   emoji: z.string().min(1).max(10),
 });
 
+export const CreateForumPostSchema = z.object({
+  channelId: z.string().min(1),
+  title: z.string().min(3).max(200),
+  tags: z.array(z.string()).default([]),
+  content: z.string().min(1).max(10000),
+  isAnonymous: z.boolean().default(false),
+  senderAvatarEmoji: z.string().optional(),
+  embedType: CommunityEmbedTypeEnum.optional(),
+  embedData: z.object({
+    note: NoteEmbedPayloadSchema.optional(),
+    todo: TodoEmbedPayloadSchema.optional(),
+    logTemplate: LogTemplateEmbedPayloadSchema.optional(),
+    photoUrl: z.string().optional(),
+  }).optional(),
+});
+
 export const CreateCommunityChannelSchema = z.object({
-  slug: z.string().min(1).max(60),
+  serverId: z.string().optional(),
+  slug: z.string().min(1).max(60).optional(),
   name: z.string().min(1).max(100),
-  description: z.string().max(500),
-  icon: z.string().default('💬'),
+  description: z.string().max(500).optional(),
+  icon: z.string().default('💬').optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#38BDF8').optional(),
+  topic: z.string().max(200).default('').optional(),
+  category: z.string().default('CONDITION HUBS').optional(),
+  type: z.enum(['text', 'forum', 'announcement']).default('text').optional(),
+  order: z.number().default(0).optional(),
+});
+
+export const CreateCommunityServerSchema = z.object({
+  name: z.string().min(3).max(100),
+  description: z.string().max(500).default(''),
+  icon: z.string().min(1).max(20).default('🌟'),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#38BDF8'),
-  topic: z.string().max(200).default(''),
+  conditionTags: z.array(z.string()).min(1).max(10),
+  isPrivate: z.boolean().default(false),
+});
+
+export const JoinCommunityServerSchema = z.object({
+  serverId: z.string().optional(),
+  inviteCode: z.string().min(4).max(10).optional(),
 });
 
 export type CreateCommunityMessageDto = z.infer<typeof CreateCommunityMessageSchema>;
 export type ReactCommunityMessageDto = z.infer<typeof ReactCommunityMessageSchema>;
+export type CreateForumPostDto = z.infer<typeof CreateForumPostSchema>;
 export type CreateCommunityChannelDto = z.infer<typeof CreateCommunityChannelSchema>;
+export type CreateCommunityServerDto = z.infer<typeof CreateCommunityServerSchema>;
+export type JoinCommunityServerDto = z.infer<typeof JoinCommunityServerSchema>;
+
+
 

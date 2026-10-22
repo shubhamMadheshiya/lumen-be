@@ -699,6 +699,17 @@ export interface ICommunityMessage {
   senderAvatarEmoji?: string;
   isAnonymous: boolean;
   content: string;
+  senderRoleColor?: string;
+  senderRoleBadges?: string[];
+  replyTo?: {
+    messageId: string;
+    senderDisplayName: string;
+    snippet: string;
+  };
+  threadMeta?: {
+    replyCount: number;
+    lastReplyAt?: string;
+  };
   embedType?: CommunityEmbedType;
   embedData?: {
     note?: INoteEmbedPayload;
@@ -714,18 +725,90 @@ export interface ICommunityMessage {
   updatedAt: string;
 }
 
+export type ChannelType = 'text' | 'forum' | 'announcement';
+
+export interface ICommunityServer {
+  _id: string;
+  name: string;
+  slug: string;
+  description: string;
+  icon: string;
+  color: string;
+  conditionTags: string[];
+  isPrivate: boolean;
+  inviteCode?: string;
+  ownerId: string;
+  membersCount: number;
+  isOfficial: boolean;
+  isMember?: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface ICommunityChannel {
   _id: string;
+  serverId?: string;
   slug: string;
   name: string;
   description: string;
   icon: string;
   color: string;
   topic: string;
+  category: string;
+  type: ChannelType;
+  order: number;
   memberCount: number;
   messageCount: number;
   isFeatured: boolean;
+  unreadCount?: number;
   createdAt: string;
+}
+
+export interface IForumPost {
+  _id: string;
+  channelId: string;
+  title: string;
+  tags: string[];
+  author: {
+    senderId: string;
+    senderDisplayName: string;
+    senderAvatarEmoji?: string;
+    isAnonymous: boolean;
+    senderRoleColor?: string;
+    senderRoleBadges?: string[];
+  };
+  content: string;
+  embedType?: CommunityEmbedType;
+  embedData?: {
+    note?: INoteEmbedPayload;
+    todo?: ITodoEmbedPayload;
+    logTemplate?: ILogTemplateEmbedPayload;
+    photoUrl?: string;
+  };
+  stats: {
+    replyCount: number;
+    spoonsCount: number;
+    cloneCount: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IDiscordUserProfile {
+  userId: string;
+  displayName: string;
+  avatarEmoji?: string;
+  bannerGradient: [string, string];
+  bio?: string;
+  energyStatus: string; // e.g. "Low Spoons", "Pacing & Resting", "Active"
+  conditionTags: string[];
+  roleBadges: string[];
+  roleColor: string;
+  stats: {
+    sharedNotesCount: number;
+    sharedTodosCount: number;
+    totalClones: number;
+  };
 }
 
 

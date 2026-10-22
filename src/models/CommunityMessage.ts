@@ -11,8 +11,19 @@ export interface ICommunityMessageDoc extends Document {
   senderId: mongoose.Types.ObjectId;
   senderDisplayName: string;
   senderAvatarEmoji?: string;
+  senderRoleColor?: string;
+  senderRoleBadges?: string[];
   isAnonymous: boolean;
   content: string;
+  replyTo?: {
+    messageId: mongoose.Types.ObjectId;
+    senderDisplayName: string;
+    snippet: string;
+  };
+  threadMeta?: {
+    replyCount: number;
+    lastReplyAt?: Date;
+  };
   embedType?: CommunityEmbedType;
   embedData?: {
     note?: INoteEmbedPayload;
@@ -34,8 +45,19 @@ const CommunityMessageSchema = new Schema<ICommunityMessageDoc>(
     senderId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     senderDisplayName: { type: String, required: true, maxlength: 80 },
     senderAvatarEmoji: { type: String, default: '🥄', maxlength: 20 },
+    senderRoleColor: { type: String, default: '#38BDF8', maxlength: 20 },
+    senderRoleBadges: { type: [String], default: [] },
     isAnonymous: { type: Boolean, default: false },
     content: { type: String, maxlength: 3000, default: '' },
+    replyTo: {
+      messageId: { type: Schema.Types.ObjectId, ref: 'CommunityMessage' },
+      senderDisplayName: { type: String },
+      snippet: { type: String },
+    },
+    threadMeta: {
+      replyCount: { type: Number, default: 0 },
+      lastReplyAt: { type: Date },
+    },
     embedType: {
       type: String,
       enum: ['note', 'todo_list', 'log_template', 'photo'],
