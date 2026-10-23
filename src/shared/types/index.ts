@@ -674,6 +674,7 @@ export interface INoteEmbedPayload {
 }
 
 export interface ITodoEmbedPayload {
+  listId?: string;
   listName: string;
   energyCost?: 'gentle' | 'moderate' | 'demanding';
   tasks: Array<{
