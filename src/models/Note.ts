@@ -69,7 +69,7 @@ NoteBlockSubSchema.add({
 const NoteSchema = new Schema<INoteDoc>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    title: { type: String, required: true, maxlength: 300, default: 'Untitled', index: true },
+    title: { type: String, maxlength: 300, default: 'Untitled Note', index: true },
     icon: { type: String, default: '📝', maxlength: 30 },
     coverGradient: { type: String, default: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)' },
     blocks: { type: [NoteBlockSubSchema], default: [] },

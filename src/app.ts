@@ -22,6 +22,7 @@ import { activitySessionsRouter } from './routes/activitySessions';
 import { tasksRouter } from './routes/tasks';
 import { notesRouter } from './routes/notes';
 import { communityChatRouter } from './routes/communityChat';
+import { notificationPolicyRouter } from './routes/notificationPolicy';
 
 export function createApp(): Application {
   const app = express();
@@ -98,6 +99,7 @@ export function createApp(): Application {
   app.use(`${v1}/tasks`,             tasksRouter);
   app.use(`${v1}/notes`,             notesRouter);
   app.use(`${v1}/community`,         communityChatRouter);
+  app.use(`${v1}/notification-policy`, notificationPolicyRouter);
 
   // ── 404 ───────────────────────────────────────
   app.use((_req, res) => {

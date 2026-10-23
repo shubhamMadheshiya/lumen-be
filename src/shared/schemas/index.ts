@@ -410,7 +410,7 @@ export const NoteBlockSchema: z.ZodType<any> = z.lazy(() =>
 );
 
 export const CreateNoteSchema = z.object({
-  title: z.string().min(1).max(300).default('Untitled'),
+  title: z.string().max(300).default('Untitled Note'),
   icon: z.string().max(30).optional(),
   coverGradient: z.string().max(200).optional(),
   blocks: z.array(NoteBlockSchema).default([]),
