@@ -1,5 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
+import { buildCommunityNotifications } from '../services/communityNotifications';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { CommunityServer } from '../models/CommunityServer';
@@ -192,37 +193,62 @@ function generateInviteCode(): string {
   return result;
 }
 
-// Helper: Seed or update official Discord server & channels
-async function ensureOfficialServer() {
+// Helper: Seed or update official Discord server & channels.
+// Requests can arrive together (the app opens the directory and a channel list at once), so this
+// runs as one shared in-flight call and creates the server with an upsert on its unique slug.
+let ensuringOfficial: Promise<InstanceType<typeof CommunityServer>> | null = null;
+
+export function ensureOfficialServer(): Promise<InstanceType<typeof CommunityServer>> {
+  if (!ensuringOfficial) {
+    ensuringOfficial = seedOfficialServer().finally(() => { ensuringOfficial = null; });
+  }
+  return ensuringOfficial;
+}
+
+async function seedOfficialServer() {
   let official = await CommunityServer.findOne({ isOfficial: true });
   if (!official) {
     const adminUser = await User.findOne();
     const ownerId = adminUser ? adminUser._id : new mongoose.Types.ObjectId();
-    official = await CommunityServer.create({
-      name: 'Lumen Spoonie Hub',
-      slug: 'lumen-spoonie-hub',
-      description: 'Official global community for chronic illness, neurodivergent pacing, and protocol sharing.',
-      icon: '🫀',
-      color: '#38BDF8',
-      conditionTags: ['All Conditions', 'Pacing', 'Dysautonomia', 'ME/CFS', 'Fibromyalgia'],
-      isPrivate: false,
-      inviteCode: 'LUMEN1',
-      ownerId,
-      memberIds: [ownerId],
-      membersCount: 1420,
-      isOfficial: true,
-    });
+    try {
+      official = await CommunityServer.findOneAndUpdate(
+        { slug: 'lumen-spoonie-hub' },
+        {
+          $setOnInsert: {
+            name: 'Lumen Spoonie Hub',
+            slug: 'lumen-spoonie-hub',
+            description: 'Official global community for chronic illness, neurodivergent pacing, and protocol sharing.',
+            icon: '🫀',
+            color: '#38BDF8',
+            conditionTags: ['All Conditions', 'Pacing', 'Dysautonomia', 'ME/CFS', 'Fibromyalgia'],
+            isPrivate: false,
+            inviteCode: 'LUMEN1',
+            ownerId,
+            memberIds: [ownerId],
+            membersCount: 1420,
+            isOfficial: true,
+          },
+        },
+        { upsert: true, new: true }
+      );
+    } catch (err) {
+      // Another instance created it between our read and write: use that one.
+      if ((err as { code?: number }).code !== 11000) throw err;
+      official = await CommunityServer.findOne({ slug: 'lumen-spoonie-hub' });
+    }
   }
+  if (!official) throw new Error('Official community server could not be created');
+  const server = official;
 
   for (const seed of DISCORD_SEED_CHANNELS) {
     await CommunityChannel.findOneAndUpdate(
       { slug: seed.slug },
-      { $set: { ...seed, serverId: official._id } },
+      { $set: { ...seed, serverId: server._id } },
       { upsert: true, new: true }
     );
   }
 
-  return official;
+  return server;
 }
 
 // GET /api/v1/community/servers - list all accessible and public community servers
@@ -425,6 +451,24 @@ communityChatRouter.post(
     }
   }
 );
+
+// GET /api/v1/community/notifications?since=<ISO date> - replies to my messages and @mentions of me
+communityChatRouter.get('/notifications', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    const user = await User.findById(userId).select('name');
+    const asked = req.query.since ? new Date(String(req.query.since)) : null;
+    const weekAgo = new Date(Date.now() - 7 * 86400000);
+    const monthAgo = new Date(Date.now() - 30 * 86400000);
+    let since = asked && !isNaN(asked.getTime()) ? asked : weekAgo;
+    if (since < monthAgo) since = monthAgo;
+
+    const data = await buildCommunityNotifications({ _id: userId, name: user?.name }, since);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /api/v1/community/channels - list all community channels for current/specified server
 communityChatRouter.get('/channels', async (req: AuthRequest, res: Response, next: NextFunction) => {
