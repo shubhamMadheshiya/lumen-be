@@ -4,6 +4,8 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { ActivitySession } from '../models/ActivitySession';
 import { LogEntry } from '../models/LogEntry';
 import { DaySession } from '../models/DaySession';
+import { DailyActivity } from '../models/DailyActivity';
+import { cleanAutoWalks, cleanDailySteps, saveAutoWalks, saveDailySteps } from '../services/autoActivity';
 
 export const activitySessionsRouter = Router();
 activitySessionsRouter.use(authenticate);
@@ -18,7 +20,8 @@ activitySessionsRouter.get('/', async (req: AuthRequest, res: Response, next: Ne
     const userId = uid(req);
     const { activityType, from, to, limit = 50 } = req.query;
 
-    const query: Record<string, unknown> = { userId };
+    // Walks the user removed ("Not a walk") stay hidden
+    const query: Record<string, unknown> = { userId, status: { $ne: 'DISCARDED' } };
     if (activityType) query.activityType = activityType;
     if (from || to) {
       query.startTime = {};
@@ -59,6 +62,39 @@ activitySessionsRouter.post('/', async (req: AuthRequest, res: Response, next: N
     });
 
     res.status(201).json({ success: true, data: session });
+  } catch (err) { next(err); }
+});
+
+// POST /api/v1/activity-sessions/auto
+// Walks the phone recorded on its own. Safe to resend: each walk is saved once.
+activitySessionsRouter.post('/auto', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const walks = cleanAutoWalks(req.body?.walks);
+    const created = await saveAutoWalks(uid(req), walks);
+    res.json({ success: true, data: { received: walks.length, created: created.length } });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/v1/activity-sessions/daily-steps
+activitySessionsRouter.put('/daily-steps', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const days = cleanDailySteps(req.body?.days);
+    const saved = await saveDailySteps(uid(req), days);
+    res.json({ success: true, data: { received: days.length, saved } });
+  } catch (err) { next(err); }
+});
+
+// GET /api/v1/activity-sessions/daily-steps?from=YYYY-MM-DD&to=YYYY-MM-DD
+activitySessionsRouter.get('/daily-steps', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const query: Record<string, unknown> = { userId: uid(req) };
+    const day = /^\d{4}-\d{2}-\d{2}$/;
+    const range: Record<string, string> = {};
+    if (typeof req.query.from === 'string' && day.test(req.query.from)) range.$gte = req.query.from;
+    if (typeof req.query.to === 'string' && day.test(req.query.to)) range.$lte = req.query.to;
+    if (Object.keys(range).length) query.date = range;
+    const rows = await DailyActivity.find(query, { _id: 0, date: 1, steps: 1, source: 1 }).sort({ date: 1 }).limit(400);
+    res.json({ success: true, data: rows });
   } catch (err) { next(err); }
 });
 
@@ -193,15 +229,40 @@ activitySessionsRouter.post('/:id/stop', async (req: AuthRequest, res: Response,
   } catch (err) { next(err); }
 });
 
+// DELETE /api/v1/activity-sessions/:id
+// "Not a walk": hides the session and its timeline entry. The row is kept as DISCARDED so a
+// later automatic sync of the same walk does not bring it back.
+activitySessionsRouter.delete('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, error: 'Session not found' });
+    const session = await ActivitySession.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      { $set: { status: 'DISCARDED' } },
+      { new: true }
+    );
+    if (!session) return res.status(404).json({ success: false, error: 'Session not found' });
+    await LogEntry.updateMany(
+      { userId, $or: [{ activitySessionId: session._id }, ...(session.linkedLogEntryId ? [{ _id: session.linkedLogEntryId }] : [])] },
+      { $set: { deletedAt: new Date() } }
+    );
+    res.json({ success: true, data: { _id: session._id, status: session.status } });
+  } catch (err) { next(err); }
+});
+
 // GET /api/v1/activity-sessions/walking/summary
 activitySessionsRouter.get('/walking/summary', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = uid(req);
-    const { period = 'week' } = req.query;
+    const { period = 'week', from } = req.query;
 
     const now = new Date();
     let startDate = new Date();
-    if (period === 'today') {
+    // The phone knows where the member's day starts (their Day Reset Boundary); the server (UTC) does not.
+    const fromDate = typeof from === 'string' ? new Date(from) : null;
+    if (fromDate && Number.isFinite(fromDate.getTime())) {
+      startDate = fromDate;
+    } else if (period === 'today') {
       startDate.setHours(0, 0, 0, 0);
     } else if (period === 'week') {
       startDate.setDate(now.getDate() - 7);

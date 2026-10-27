@@ -13,6 +13,8 @@ export interface IActivityPointDoc {
 export interface IActivitySessionDoc extends Document {
   userId: mongoose.Types.ObjectId;
   clientId: string;
+  /** MANUAL: the user pressed Start. AUTO: found in the phone's own step history. */
+  source: 'MANUAL' | 'AUTO';
   activityType: ActivityType;
   title: string;
   status: ActivitySessionStatus;
@@ -60,6 +62,7 @@ const ActivitySessionSchema = new Schema<IActivitySessionDoc>(
   {
     userId:                { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     clientId:              { type: String, required: true },
+    source:                { type: String, enum: ['MANUAL', 'AUTO'], default: 'MANUAL' },
     activityType:          {
       type: String,
       enum: ['WALKING', 'SITTING', 'SLEEP', 'EXERCISE', 'STRETCHING', 'MEDITATION', 'CUSTOM'],

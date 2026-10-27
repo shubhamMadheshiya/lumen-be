@@ -365,6 +365,7 @@ export interface IActivitySession {
   _id: string;
   userId: string;
   clientId: string;               // UUID for offline dedup
+  source?: 'MANUAL' | 'AUTO';     // AUTO: found in the phone's own step history
   activityType: ActivityType;
   title: string;                  // e.g. "Evening Walk", "Desk Sitting"
   status: ActivitySessionStatus;
