@@ -16,6 +16,7 @@
 import PDFDocument from 'pdfkit';
 import { ILogEntryDoc } from '../models/LogEntry';
 import { IUserDoc } from '../models/User';
+import { SummaryModel } from './insights/summaryModel';
 
 // ── Anatomical Terminology Dictionary ───────────────────────────
 const ANATOMICAL_MAP: Record<string, string> = {
@@ -452,6 +453,136 @@ export function computeClinicalHighlights(items: FormattedLogItem[]) {
     medications: medicationRecords,
     locations: Array.from(geoLocationsTracked),
   };
+}
+
+const MARK_COLOR: Record<SummaryModel['calendar'][number]['mark'], string> = {
+  good: '#15803D',
+  mid: '#CA8A04',
+  harder: '#B91C1C',
+  unlogged: '#CBD5E1',
+};
+const MARK_LETTER: Record<SummaryModel['calendar'][number]['mark'], string> = {
+  good: 'G', mid: 'M', harder: 'H', unlogged: '',
+};
+
+/**
+ * Renders the one-page "for your doctor" summary onto the current page of `doc`, as page 1. It
+ * is deterministic: every line comes straight from `model` (see summaryModel.ts), no text is
+ * written by anything but this function, and nothing here is checked against a clinical threshold.
+ * Sections that would overflow the page skip the rest of their list rather than running onto page 2.
+ */
+export function renderSummaryPage(doc: PDFKit.PDFDocument, model: SummaryModel, patientName?: string): void {
+  const textDark = '#0F172A';
+  const textMuted = '#475569';
+  const textLight = '#64748B';
+  const primaryColor = '#C2410C';
+  const borderLight = '#E2E8F0';
+  const left = 50;
+  const right = doc.page.width - 50;
+  const bottomLimit = doc.page.height - 55; // leaves room for the shared footer
+  const width = right - left;
+
+  const fits = (need: number) => doc.y + need <= bottomLimit;
+  const heading = (text: string) => {
+    doc.fontSize(9.5).font('Helvetica-Bold').fillColor(primaryColor).text(text.toUpperCase(), left, doc.y);
+    doc.moveDown(0.15);
+  };
+  const bullets = (lines: string[], truncated: number) => {
+    doc.fontSize(8.5).font('Helvetica').fillColor(textDark);
+    for (const line of lines) {
+      if (!fits(12)) { doc.text('…', left, doc.y); return; }
+      doc.text(`• ${line}`, left + 8, doc.y, { width: width - 8 });
+    }
+    if (truncated > 0 && fits(12)) {
+      doc.fontSize(8).font('Helvetica-Oblique').fillColor(textLight).text(`+ ${truncated} more — see the detail pages`, left + 8, doc.y);
+    }
+  };
+
+  doc.rect(left, 40, width, 4).fill(primaryColor);
+  doc.y = 52;
+  doc.fontSize(17).font('Helvetica-Bold').fillColor(textDark).text('LUMEN — SUMMARY FOR YOUR DOCTOR', left, doc.y);
+  doc.moveDown(0.15);
+  doc.fontSize(9.5).font('Helvetica').fillColor(textMuted).text(
+    `${patientName ? patientName + '  ·  ' : ''}${model.periodLine}  ·  Generated ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+  );
+  doc.moveDown(0.1);
+  doc.fontSize(8).font('Helvetica-Oblique').fillColor(textLight).text(
+    'A self-tracking record, not a diagnosis. Patterns shown are observed together in the logs, not proven causes.',
+  );
+  doc.moveDown(0.3);
+  doc.strokeColor(borderLight).lineWidth(1).moveTo(left, doc.y).lineTo(right, doc.y).stroke();
+  doc.moveDown(0.4);
+
+  doc.fontSize(9.5).font('Helvetica-Bold').fillColor(textDark).text(model.completenessLine, left, doc.y);
+  doc.fontSize(9).font('Helvetica').fillColor(textMuted).text(model.trendLine, left, doc.y);
+  doc.moveDown(0.3);
+
+  // Weekly trend, as tiny bar sparklines
+  if (model.weeklySeries.length > 0 && fits(16 + 18 * model.weeklySeries.length)) {
+    heading('Weekly trend (lower is better)');
+    const barW = 6, barGap = 2, barMaxH = 14;
+    for (const series of model.weeklySeries) {
+      if (!fits(18)) break;
+      const rowY = doc.y;
+      doc.fontSize(8).font('Helvetica').fillColor(textDark).text(series.label, left + 8, rowY + 3, { width: 70 });
+      const max = Math.max(...series.values, 1);
+      let x = left + 85;
+      for (const v of series.values.slice(-24)) {
+        const h = Math.max(1.5, (v / max) * barMaxH);
+        doc.rect(x, rowY + (barMaxH - h), barW, h).fill(primaryColor);
+        x += barW + barGap;
+      }
+      doc.y = rowY + barMaxH + 4;
+    }
+    doc.moveDown(0.25);
+  }
+
+  // Good/harder day calendar strip
+  if (model.calendar.length > 0 && fits(38)) {
+    heading(`Last ${model.calendar.length} days`);
+    const cell = Math.min(13, Math.floor(width / model.calendar.length) - 1);
+    let x = left + 8;
+    const rowY = doc.y;
+    for (const day of model.calendar) {
+      doc.rect(x, rowY, cell, cell).fillAndStroke(MARK_COLOR[day.mark], borderLight);
+      if (day.mark !== 'unlogged') {
+        doc.fontSize(6).font('Helvetica-Bold').fillColor('#FFFFFF').text(MARK_LETTER[day.mark], x, rowY + 2.5, { width: cell, align: 'center' });
+      }
+      x += cell + 1;
+    }
+    doc.y = rowY + cell + 4;
+    doc.fontSize(7).font('Helvetica').fillColor(textLight).text(model.calendarLegend, left + 8, doc.y);
+    doc.moveDown(0.3);
+  }
+
+  if (model.medicationLines.length > 0 && fits(14 + 11 * model.medicationLines.length)) {
+    heading('Current medicines');
+    bullets(model.medicationLines, model.medicationsTruncated);
+    doc.moveDown(0.25);
+  }
+
+  if (model.flareLines.length > 0 && fits(14 + 11 * model.flareLines.length)) {
+    heading('Flare episodes in this period');
+    bullets(model.flareLines, model.flaresTruncated);
+    doc.moveDown(0.25);
+  }
+
+  if (model.redFlagLines.length > 0 && fits(14 + 11 * model.redFlagLines.length)) {
+    heading('Safety notices shown in the app');
+    bullets(model.redFlagLines, model.redFlagsTruncated);
+    doc.moveDown(0.25);
+  }
+
+  if (model.patternLines.length > 0 && fits(14 + 11 * model.patternLines.length)) {
+    heading('Patterns noticed in the logs (not tested, not causes)');
+    bullets(model.patternLines, model.patternsTruncated);
+    doc.moveDown(0.25);
+  }
+
+  if (model.notesForDoctor && fits(28)) {
+    heading("The member's own questions");
+    doc.fontSize(8.5).font('Helvetica').fillColor(textDark).text(model.notesForDoctor, left + 8, doc.y, { width: width - 8 });
+  }
 }
 
 /**

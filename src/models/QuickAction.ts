@@ -11,6 +11,8 @@ export interface IQuickActionDoc extends Document {
   dailyGoal?: number;
   linkedQuestionId?: mongoose.Types.ObjectId | null;
   linkedOptionId?: mongoose.Types.ObjectId | null;
+  /** Optional override of how Insights treats this tap (see AnalysisSchema). */
+  analysis?: { kind: 'exposure' | 'outcome' | 'reactive' | 'context' | 'ignore'; lagDays?: number };
   order: number;
   isVisible: boolean;
   archivedAt?: Date;
@@ -31,6 +33,10 @@ const QuickActionSchema = new Schema<IQuickActionDoc>(
     dailyGoal:        { type: Number },
     linkedQuestionId: { type: Schema.Types.ObjectId, ref: 'Question' },
     linkedOptionId:   { type: Schema.Types.ObjectId, ref: 'Option' },
+    analysis: {
+      kind:    { type: String, enum: ['exposure', 'outcome', 'reactive', 'context', 'ignore'] },
+      lagDays: { type: Number, min: 0, max: 30 },
+    },
     order:            { type: Number, default: 0 },
     isVisible:        { type: Boolean, default: true },
     archivedAt:       { type: Date },

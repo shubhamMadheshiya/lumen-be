@@ -6,12 +6,27 @@ import { AppError } from '../utils/errors';
 import { LogEntry } from '../models/LogEntry';
 import { CreateLogEntrySchema, BatchLogEntrySchema } from '../shared';
 import { z } from 'zod';
+import { evaluateRedFlags, mergeFlags, RED_FLAG_CONFIG, FlagEntry, RedFlag } from '../services/safety/redFlags';
 
 export const logsRouter = Router();
 logsRouter.use(authenticate);
 
 function uid(req: AuthRequest): mongoose.Types.ObjectId {
   return new mongoose.Types.ObjectId(req.userId!);
+}
+
+/** "Contact your doctor" flags for entries that were just saved. A failure here never blocks saving. */
+async function flagsForNewEntries(userId: mongoose.Types.ObjectId, saved: FlagEntry[]): Promise<RedFlag[]> {
+  try {
+    if (saved.length === 0) return [];
+    const since = new Date(Date.now() - RED_FLAG_CONFIG.freshWindowMs - RED_FLAG_CONFIG.relatedWindowMs);
+    const recent = await LogEntry.find({ userId, deletedAt: { $exists: false }, occurredAt: { $gte: since } })
+      .select('occurredAt answers').lean();
+    return mergeFlags(saved.flatMap(e => evaluateRedFlags(e, recent as FlagEntry[])));
+  } catch (err) {
+    console.error('[safety] red flag check failed:', err);
+    return [];
+  }
 }
 
 // POST /logs — create a single log entry
@@ -31,7 +46,8 @@ logsRouter.post('/', validate(CreateLogEntrySchema), async (req: AuthRequest, re
       userId,
       loggedAt: new Date(),
     });
-    res.status(201).json({ success: true, data: entry });
+    const flags = await flagsForNewEntries(userId, [body]);
+    res.status(201).json({ success: true, data: entry, ...(flags.length ? { safety: { flags } } : {}) });
   } catch (err) { next(err); }
 });
 
@@ -41,14 +57,17 @@ logsRouter.post('/batch', validate(BatchLogEntrySchema), async (req: AuthRequest
     const userId = uid(req);
     const { entries } = req.body as z.infer<typeof BatchLogEntrySchema>;
 
+    const created: typeof entries = [];
     const results = await Promise.all(entries.map(async (body) => {
       const existing = await LogEntry.findOne({ userId, clientId: body.clientId });
       if (existing) return { clientId: body.clientId, status: 'duplicate', id: existing._id };
       const entry = await LogEntry.create({ ...body, userId, loggedAt: new Date() });
+      created.push(body);
       return { clientId: body.clientId, status: 'created', id: entry._id };
     }));
 
-    res.status(201).json({ success: true, data: results });
+    const flags = await flagsForNewEntries(userId, created);
+    res.status(201).json({ success: true, data: results, ...(flags.length ? { safety: { flags } } : {}) });
   } catch (err) { next(err); }
 });
 

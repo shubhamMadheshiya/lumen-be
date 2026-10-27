@@ -4,6 +4,7 @@
  */
 import { Router, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
+import { z } from 'zod';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { AppError } from '../utils/errors';
@@ -23,6 +24,7 @@ import {
   CreateQuickActionSchema, UpdateQuickActionSchema,
   CreateCustomUnitSchema,
   CreateMedicationSchema,
+  AddMedicationChangeSchema,
   CreateReminderSchema,
   ReorderSchema,
 } from '../shared';
@@ -701,6 +703,22 @@ configRouter.delete('/medications/:id', async (req: AuthRequest, res: Response, 
     const doc = await Medication.findOneAndDelete({ _id: req.params.id, userId: uid(req) });
     if (!doc) throw AppError.notFound();
     res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// Logs a start, stop or dose change, so the progress trend and "did it help" comparison can mark it
+configRouter.post('/medications/:id/changes', validate(AddMedicationChangeSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { at, kind, note } = req.body as z.infer<typeof AddMedicationChangeSchema>;
+    const doc = await Medication.findOne({ _id: req.params.id, userId: uid(req) });
+    if (!doc) throw AppError.notFound();
+
+    doc.changes.push({ at, kind, note });
+    doc.changes.sort((a, b) => a.at.localeCompare(b.at));
+    if (kind === 'started' && (!doc.startedOn || at < doc.startedOn)) doc.startedOn = at;
+    if (kind === 'stopped') { doc.stoppedOn = at; doc.active = false; }
+    await doc.save();
+    res.status(201).json({ success: true, data: doc });
   } catch (err) { next(err); }
 });
 

@@ -134,9 +134,9 @@ notificationPolicyRouter.post('/flare-mode', async (req: AuthRequest, res: Respo
 notificationPolicyRouter.post('/flare-mode/evaluate', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = uid(req);
-    const user = await User.findById(userId).select('preferences.timezone').lean();
+    const user = await User.findById(userId).select('preferences.timezone preferences.dayBoundaryHour').lean();
     const timeZone = user?.preferences?.timezone || 'UTC';
-    const result = await evaluateFlareMode(userId, timeZone);
+    const result = await evaluateFlareMode(userId, timeZone, new Date(), user?.preferences?.dayBoundaryHour);
     const policy = await getOrCreatePolicy(userId);
     res.json({
       success: true,

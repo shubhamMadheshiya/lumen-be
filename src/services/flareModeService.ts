@@ -9,6 +9,7 @@ import mongoose from 'mongoose';
 import { LogEntry } from '../models/LogEntry';
 import { Category } from '../models/Category';
 import { getOrCreatePolicy } from '../models/NotificationPolicy';
+import { DEFAULT_BOUNDARY_HOUR, resolveTimeZone, shiftDayKey, trackingDayKey } from '../utils/dayKey';
 
 export const MIN_BASELINE_DAYS = 14;
 export const BASELINE_WINDOW_DAYS = 60;
@@ -33,21 +34,12 @@ export function percentile(values: number[], p: number): number {
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
 }
 
-export function dayKey(date: Date, timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
-    }).format(date);
-  } catch {
-    return date.toISOString().slice(0, 10);
-  }
+/** The day `date` falls in, split at the member's Day Reset Boundary (0 = local midnight). */
+export function dayKey(date: Date, timeZone: string, boundaryHour = 0): string {
+  return trackingDayKey(date, timeZone, boundaryHour);
 }
 
-function shiftKey(key: string, deltaDays: number): string {
-  const d = new Date(`${key}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + deltaDays);
-  return d.toISOString().slice(0, 10);
-}
+const shiftKey = shiftDayKey;
 
 /**
  * @param dailyMax highest symptom severity logged per local day (YYYY-MM-DD)
@@ -96,6 +88,7 @@ export async function loadDailySymptomMax(
   userId: mongoose.Types.ObjectId,
   timeZone: string,
   now: Date = new Date(),
+  boundaryHour: number = DEFAULT_BOUNDARY_HOUR,
 ): Promise<Record<string, number>> {
   const since = new Date(now.getTime() - (BASELINE_WINDOW_DAYS + 3) * 24 * 60 * 60 * 1000);
   const symptomCats = await Category.find({ userId, role: 'symptom' }).select('_id').lean();
@@ -106,7 +99,7 @@ export async function loadDailySymptomMax(
     categoryId: { $in: symptomCats.map(c => c._id) },
     occurredAt: { $gte: since },
     deletedAt: { $exists: false },
-  }).select('occurredAt answers').lean();
+  }).select('occurredAt timezone answers').lean();
 
   const dailyMax: Record<string, number> = {};
   for (const e of entries) {
@@ -116,7 +109,8 @@ export async function loadDailySymptomMax(
         const raw = f.canonicalValue ?? f.value;
         const n = typeof raw === 'number' ? raw : Number(raw);
         if (!Number.isFinite(n)) continue;
-        const key = dayKey(e.occurredAt, timeZone);
+        // The zone the entry was logged in, so a trip does not move old days around
+        const key = dayKey(e.occurredAt, resolveTimeZone(e.timezone, timeZone), boundaryHour);
         dailyMax[key] = Math.max(dailyMax[key] ?? 0, n);
       }
     }
@@ -136,6 +130,7 @@ export async function evaluateFlareMode(
   userId: mongoose.Types.ObjectId,
   timeZone: string,
   now: Date = new Date(),
+  boundaryHour: number = DEFAULT_BOUNDARY_HOUR,
 ): Promise<FlareEvaluation> {
   const policy = await getOrCreatePolicy(userId);
   const current = policy.flareMode;
@@ -144,8 +139,8 @@ export async function evaluateFlareMode(
     return { active: current.active, source: current.source, changed: false };
   }
 
-  const dailyMax = await loadDailySymptomMax(userId, timeZone, now);
-  const assessment = assessFlare(dailyMax, dayKey(now, timeZone));
+  const dailyMax = await loadDailySymptomMax(userId, timeZone, now, boundaryHour);
+  const assessment = assessFlare(dailyMax, dayKey(now, timeZone, boundaryHour));
 
   let next = current.active;
   if (assessment.state === 'flare') next = true;

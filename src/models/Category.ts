@@ -6,6 +6,8 @@ export interface ICategoryDoc extends Document {
   icon: string;
   color: string;
   role: 'trigger_candidate' | 'symptom' | 'context';
+  /** Optional override of how Insights treats this category (see AnalysisSchema). */
+  analysis?: { kind: 'exposure' | 'outcome' | 'reactive' | 'context' | 'ignore'; lagDays?: number };
   order: number;
   isActive: boolean;
   archivedAt?: Date;
@@ -21,6 +23,10 @@ const CategorySchema = new Schema<ICategoryDoc>(
     icon:        { type: String, required: true, maxlength: 100 },
     color:       { type: String, required: true, match: /^#[0-9A-Fa-f]{6}$/ },
     role:        { type: String, enum: ['trigger_candidate', 'symptom', 'context'], required: true },
+    analysis: {
+      kind:    { type: String, enum: ['exposure', 'outcome', 'reactive', 'context', 'ignore'] },
+      lagDays: { type: Number, min: 0, max: 30 },
+    },
     order:       { type: Number, default: 0 },
     isActive:    { type: Boolean, default: true },
     archivedAt:  { type: Date },

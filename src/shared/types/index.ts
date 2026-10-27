@@ -69,6 +69,12 @@ export interface FieldDefinition {
 
 // ────────── Config entities ──────────
 
+/** How Insights treats an item; see AnalysisSchema. */
+export interface IAnalysis {
+  kind: 'exposure' | 'outcome' | 'reactive' | 'context' | 'ignore';
+  lagDays?: number;
+}
+
 export interface ICategory {
   _id: string;
   userId: string;
@@ -76,6 +82,7 @@ export interface ICategory {
   icon: string;
   color: string;
   role: CategoryRole;
+  analysis?: IAnalysis;
   order: number;
   isActive: boolean;
   archivedAt?: string;
@@ -141,6 +148,7 @@ export interface IQuickAction {
   dailyGoal?: number;
   linkedQuestionId?: string | null;
   linkedOptionId?: string | null;
+  analysis?: IAnalysis;
   order: number;
   isVisible: boolean;
   archivedAt?: string;
@@ -421,6 +429,9 @@ export interface IMedication {
   unit?: string;
   schedule?: string;
   active: boolean;
+  startedOn?: string; // YYYY-MM-DD Lumen day
+  stoppedOn?: string;
+  changes: Array<{ at: string; kind: 'started' | 'stopped' | 'dose_changed'; note?: string }>;
   createdAt: string;
   updatedAt: string;
 }

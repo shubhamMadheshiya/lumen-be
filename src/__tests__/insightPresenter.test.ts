@@ -2,7 +2,9 @@ import mongoose from 'mongoose';
 import {
   buildDescriptiveStats,
   formatDuration,
+  presentFindings,
   presentInsights,
+  rankFindings,
   severityByDay,
   trendOf,
 } from '../services/insightPresenter';
@@ -116,6 +118,70 @@ describe('presentInsights', () => {
   it('does nothing for an empty list', async () => {
     expect(await presentInsights([])).toEqual([]);
     expect(Option.find).not.toHaveBeenCalled();
+  });
+});
+
+describe('presentFindings', () => {
+  const optId = oid(), qId = oid(), catId = oid(), symCatId = oid();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFind(QuickAction, []);
+    mockFind(Option, [{ _id: optId, questionId: qId, icon: '🥛' }]);
+    mockFind(Question, [{ _id: qId, categoryId: catId }]);
+    (Category.find as jest.Mock).mockImplementation((q: { _id: { $in: unknown[] } }) => {
+      const wanted = q._id.$in.map(String);
+      const all = [
+        { _id: catId, name: 'Food & Drink', icon: '🍽️', role: 'trigger_candidate' },
+        { _id: symCatId, name: 'Symptoms', icon: '🩺', role: 'symptom' },
+      ];
+      return chain(all.filter(c => wanted.includes(String(c._id))));
+    });
+  });
+
+  const finding = (over: Record<string, unknown> = {}) => ({
+    exposureKey: `opt_${optId}`, exposureLabel: 'Dairy', outcomeKey: `cat_${symCatId}`, outcomeLabel: 'Joint pain', lagDays: 1,
+    a: 9, b: 5, c: 6, d: 25, shownTier: 'possible' as const, ...over,
+  });
+
+  it('turns a stored finding into counts a person can read', async () => {
+    const [dto] = await presentFindings([finding()]);
+    expect(dto).toMatchObject({
+      id: `opt_${optId}|cat_${symCatId}|1`,
+      exposure: { categoryName: 'Food & Drink', optionLabel: 'Dairy', categoryIcon: '🍽️' },
+      outcome: { optionLabel: 'Joint pain' },
+      lagDays: 1,
+      counts: { exposedWith: 9, exposedTotal: 14, otherWith: 6, otherTotal: 31 },
+      tier: 'possible',
+      noLongerSeen: false,
+      weakDays: false,
+    });
+  });
+
+  it('ranks consistent patterns first, then by the gap between the two rates', () => {
+    const counts = (w: number, t: number, ow: number, ot: number) => ({ exposedWith: w, exposedTotal: t, otherWith: ow, otherTotal: ot });
+    const ranked = rankFindings([
+      { id: 'small', tier: 'possible', counts: counts(6, 12, 5, 30) },
+      { id: 'big', tier: 'possible', counts: counts(11, 12, 4, 30) },
+      { id: 'steady', tier: 'consistent', counts: counts(7, 14, 5, 30) },
+    ]);
+    expect(ranked.map(r => r.id)).toEqual(['steady', 'big', 'small']);
+  });
+
+  it('marks a finding that is no longer supported, but only once it fell back to still learning', async () => {
+    const [gone] = await presentFindings([finding({ shownTier: 'still_learning', noLongerSeen: true, lastShownDay: '2026-10-12' })]);
+    expect(gone).toMatchObject({ noLongerSeen: true, lastShownDay: '2026-10-12', tier: 'possible' });
+    const [still] = await presentFindings([finding({ noLongerSeen: true })]);
+    expect(still.noLongerSeen).toBe(false);
+  });
+
+  it('flags findings that rest mostly on weak evidence of logging', async () => {
+    const [dto] = await presentFindings([finding({ weakShare: 0.4 })]);
+    expect(dto.weakDays).toBe(true);
+  });
+
+  it('does nothing for an empty list', async () => {
+    expect(await presentFindings([])).toEqual([]);
   });
 });
 

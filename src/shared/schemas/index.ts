@@ -40,11 +40,23 @@ export const FieldDefinitionSchema = z.object({
 
 // ────────── Category ──────────
 
+/**
+ * How Insights treats an item: an `exposure` may precede symptoms, an `outcome` is what is
+ * measured, `reactive` items are usually done in response to symptoms (painkillers, rest) so
+ * they are never offered as causes, `context` is background, `ignore` is left out.
+ */
+export const AnalysisSchema = z.object({
+  kind: z.enum(['exposure', 'outcome', 'reactive', 'context', 'ignore']),
+  /** Extra days to look back for slow exposures, e.g. sun in lupus. */
+  lagDays: z.number().int().min(0).max(30).optional(),
+});
+
 export const CreateCategorySchema = z.object({
   name: z.string().min(1).max(60),
   icon: z.string().min(1).max(100),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
   role: z.enum(['trigger_candidate', 'symptom', 'context']),
+  analysis: AnalysisSchema.optional(),
   order: z.number().int().min(0).optional(),
 });
 
@@ -106,6 +118,7 @@ export const CreateQuickActionSchema = z.object({
   dailyGoal: z.number().positive().optional(),
   linkedQuestionId: z.string().nullable().optional(),
   linkedOptionId: z.string().nullable().optional(),
+  analysis: AnalysisSchema.optional(),
   order: z.number().int().min(0).optional(),
   isVisible: z.boolean().default(true),
 });
@@ -254,6 +267,14 @@ export const CreateMedicationSchema = z.object({
   unit: z.string().max(20).optional(),
   schedule: z.string().max(200).optional(),
   active: z.boolean().default(true),
+  startedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+/** Logs a start, stop or dose change for a medicine, so progress trends can show it as a marker. */
+export const AddMedicationChangeSchema = z.object({
+  at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  kind: z.enum(['started', 'stopped', 'dose_changed']),
+  note: z.string().max(200).optional(),
 });
 
 // ────────── Templates ──────────
@@ -270,6 +291,10 @@ export const ReportRequestSchema = z.object({
   format: z.enum(['pdf', 'csv', 'json']).default('pdf'),
   categoryIds: z.array(z.string()).optional(),
   includeImages: z.boolean().default(false),
+  /** A one-page "for your doctor" summary ahead of the detailed PDF. PDF format only. */
+  includeSummary: z.boolean().default(true),
+  /** The member's own free-text questions for their doctor, printed on the summary page. */
+  notesForDoctor: z.string().max(1000).optional(),
 });
 
 // ────────── Reorder ──────────
