@@ -18,6 +18,10 @@ import { shiftDayKey } from '../utils/dayKey';
 import { EarlyWarningState } from '../models/EarlyWarningState';
 import { applyEarlyWarningFeedback, FeedbackAction } from '../services/insights/earlyWarningService';
 import { z } from 'zod';
+import { explainFinding, explainProgress, explainWarning } from '../services/llm/explain';
+import { answerQuestion } from '../services/llm/ask';
+import { classifyQuestion, fixedReplyFor } from '../services/llm/router';
+import { factsForFinding, factsForProgress, factsForWarning } from '../services/llm/facts';
 
 export const insightsRouter = Router();
 insightsRouter.use(authenticate);
@@ -184,5 +188,87 @@ insightsRouter.post('/warning/feedback', async (req: AuthRequest, res: Response,
     if (!parsed.success) return res.status(400).json({ success: false, message: 'action must be helpful, not_this_time or stop' });
     await applyEarlyWarningFeedback(req.userId!, parsed.data.action as FeedbackAction);
     res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+const ExplainSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('finding'), exposureKey: z.string().min(1).max(200), outcomeKey: z.string().min(1).max(200), lagDays: z.number().int().min(0).max(10) }),
+  z.object({ kind: z.literal('progress') }),
+  z.object({ kind: z.literal('warning') }),
+]);
+
+async function requireAiExplanations(userId: string, res: Response): Promise<boolean> {
+  const user = await User.findById(userId).select('preferences.aiExplanations').lean();
+  if (!user?.preferences?.aiExplanations) {
+    res.status(403).json({ success: false, message: 'Turn on AI explanations in Settings first.' });
+    return false;
+  }
+  return true;
+}
+
+// POST /insights/explain - a plain-language version of one card, opt-in via preferences.aiExplanations.
+// Off by default: see services/llm. Falls back to a deterministic template when Gemini is off,
+// unavailable, or its answer fails validation.
+insightsRouter.post('/explain', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.userId!;
+    if (!(await requireAiExplanations(userId, res))) return;
+    const parsed = ExplainSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ success: false, message: 'Invalid request.' });
+    const body = parsed.data;
+
+    if (body.kind === 'finding') {
+      const stored = await InsightFinding.findOne({
+        userId, exposureKey: body.exposureKey, outcomeKey: body.outcomeKey, lagDays: body.lagDays,
+      }).lean();
+      if (!stored) return res.status(404).json({ success: false, message: 'Pattern not found.' });
+      const [dto] = await presentFindings([stored]);
+      return res.json({ success: true, data: await explainFinding(userId, dto) });
+    }
+
+    if (body.kind === 'progress') {
+      const rows = await loadPersistedDayRows(userId);
+      const flareDayKeys = await loadFlareDayKeys(userId);
+      const dto = presentProgress(classifyTrend(weeklyMedians(rows)), goodBadDays(rows, flareDayKeys), regimeShifts(rows));
+      return res.json({ success: true, data: await explainProgress(userId, dto) });
+    }
+
+    const state = await EarlyWarningState.findOne({ userId }).lean();
+    if (!state) return res.status(404).json({ success: false, message: 'No early-warning state yet.' });
+    return res.json({ success: true, data: await explainWarning(userId, state) });
+  } catch (err) { next(err); }
+});
+
+const AskSchema = z.object({ question: z.string().min(1).max(500) });
+
+// POST /insights/ask - the Q&A box, opt-in via preferences.aiExplanations. Crisis / medication /
+// medical-diagnosis questions never reach the model: see services/llm/router.ts.
+insightsRouter.post('/ask', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.userId!;
+    if (!(await requireAiExplanations(userId, res))) return;
+    const parsed = AskSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ success: false, message: 'question is required.' });
+    const question = parsed.data.question;
+
+    const route = classifyQuestion(question);
+    if (route !== 'ok') {
+      return res.json({ success: true, data: { text: fixedReplyFor(route), source: 'template' } });
+    }
+
+    const [storedFindings, rows, flareDayKeys, state] = await Promise.all([
+      InsightFinding.find({ userId, shownTier: { $ne: 'still_learning' } }).limit(5).lean(),
+      loadPersistedDayRows(userId),
+      loadFlareDayKeys(userId),
+      EarlyWarningState.findOne({ userId }).lean(),
+    ]);
+    const findings = await presentFindings(storedFindings);
+    const progress = presentProgress(classifyTrend(weeklyMedians(rows)), goodBadDays(rows, flareDayKeys), regimeShifts(rows));
+    const facts = [
+      ...findings.flatMap(f => factsForFinding(f)),
+      ...factsForProgress(progress),
+      ...(state ? factsForWarning(state) : []),
+    ];
+    return res.json({ success: true, data: await answerQuestion(userId, question, facts) });
   } catch (err) { next(err); }
 });

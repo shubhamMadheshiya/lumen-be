@@ -44,6 +44,11 @@ export const config = {
 
   weatherApiKey: optional('WEATHER_API_KEY'),
 
+  gemini: {
+    apiKey: optional('GEMINI_API_KEY'),
+    model: optional('GEMINI_MODEL', 'gemini-3.1-flash-lite'),
+  },
+
   isDev: optional('NODE_ENV', 'development') === 'development',
   isProd: optional('NODE_ENV', 'development') === 'production',
 } as const;

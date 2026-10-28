@@ -243,6 +243,7 @@ export const UpdateProfileSchema = z.object({
     timezone: z.string().optional(),
     theme: z.enum(['light', 'dark', 'system']).optional(),
     dayBoundaryHour: z.number().int().min(0).max(12).optional(),
+    aiExplanations: z.boolean().optional(),
   }).optional(),
 });
 

@@ -17,6 +17,8 @@ export interface IUserDoc extends Document {
     timezone: string;
     theme: 'light' | 'dark' | 'system';
     dayBoundaryHour: number;
+    /** Off by default: see services/llm. Sends only pattern counts and labels, never notes or raw logs. */
+    aiExplanations: boolean;
   };
   consentAcceptedAt?: Date;
   configVersion: number;
@@ -42,6 +44,7 @@ const UserSchema = new Schema<IUserDoc>(
       timezone:        { type: String, default: 'UTC' },
       theme:           { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
       dayBoundaryHour: { type: Number, default: 4, min: 0, max: 12 },
+      aiExplanations:  { type: Boolean, default: false },
     },
     consentAcceptedAt: { type: Date },
     configVersion:     { type: Number, default: 1 },

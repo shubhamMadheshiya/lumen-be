@@ -468,6 +468,7 @@ export interface UserPreferences {
   timezone: string;
   theme: Theme;
   dayBoundaryHour: number; // hour at which a new "day" starts (e.g. 4 = 4am)
+  aiExplanations?: boolean; // off by default; opt-in plain-language narration via Gemini (Phase 6)
 }
 
 export interface IUser {
