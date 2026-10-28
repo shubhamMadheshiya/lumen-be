@@ -7,7 +7,7 @@
  */
 import { DayRow } from './dayTable';
 import { dailyComposite } from './progress';
-import { shiftDayKey } from '../../utils/dayKey';
+import { daysBetween, shiftDayKey } from '../../utils/dayKey';
 
 export type Block = 'with' | 'without';
 
@@ -107,6 +107,35 @@ function statisticFor(order: Block[], tallyByIndex: BlockTally[]): number {
   const withTallies = order.map((b, i) => (b === 'with' ? tallyByIndex[i] : null)).filter((t): t is BlockTally => !!t);
   const withoutTallies = order.map((b, i) => (b === 'without' ? tallyByIndex[i] : null)).filter((t): t is BlockTally => !!t);
   return pooledRate(withTallies) - pooledRate(withoutTallies);
+}
+
+export interface ExperimentProgress {
+  /** 0-5, or null once the schedule has finished. */
+  currentBlockIndex: number | null;
+  currentBlock: Block | null;
+  /** 1-7 within the current block, or null once finished. */
+  dayInBlock: number | null;
+  daysElapsed: number;
+  daysRemaining: number;
+  /** True once `today` is on or after the schedule's last day. */
+  readyForAnalysis: boolean;
+}
+
+/** Where the schedule stands on `today` (a Lumen day key). */
+export function experimentProgress(startDay: string, order: Block[], today: string): ExperimentProgress {
+  const daysElapsed = Math.max(0, daysBetween(startDay, today) + (today >= startDay ? 1 : 0));
+  const totalDays = BLOCKS * BLOCK_DAYS;
+  const dayIndex = daysBetween(startDay, today); // 0-based day offset; negative before the start
+  const finished = dayIndex >= totalDays;
+  const blockIndex = finished || dayIndex < 0 ? null : Math.floor(dayIndex / BLOCK_DAYS);
+  return {
+    currentBlockIndex: blockIndex,
+    currentBlock: blockIndex === null ? null : order[blockIndex],
+    dayInBlock: blockIndex === null ? null : (dayIndex % BLOCK_DAYS) + 1,
+    daysElapsed: Math.min(daysElapsed, totalDays),
+    daysRemaining: Math.max(0, totalDays - dayIndex),
+    readyForAnalysis: dayIndex >= totalDays - 1,
+  };
 }
 
 export interface ExperimentResult {

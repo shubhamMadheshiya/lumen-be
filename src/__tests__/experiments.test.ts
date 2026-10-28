@@ -1,7 +1,7 @@
 import { DayRow } from '../services/insights/dayTable';
 import { shiftDayKey } from '../utils/dayKey';
 import {
-  allBlockOrders, analyseExperiment, Block, blockWindows, experimentEndDay, MIN_P_VALUE,
+  allBlockOrders, analyseExperiment, Block, blockWindows, experimentEndDay, experimentProgress, MIN_P_VALUE,
   randomBlockOrder, severityValues, tallyBlock, BLOCKS, BLOCKS_WITH, BLOCK_DAYS,
 } from '../services/insights/experiments';
 
@@ -20,9 +20,8 @@ describe('randomBlockOrder', () => {
 
   it('is deterministic for a given generator', () => {
     const seq = [0.1, 0.9, 0.2, 0.8, 0.3, 0.7];
-    let i = 0;
-    const rand = () => seq[i++ % seq.length];
-    expect(randomBlockOrder(rand)).toEqual(randomBlockOrder(rand));
+    const freshRand = () => { let i = 0; return () => seq[i++ % seq.length]; };
+    expect(randomBlockOrder(freshRand())).toEqual(randomBlockOrder(freshRand()));
   });
 });
 
@@ -45,11 +44,38 @@ describe('blockWindows and experimentEndDay', () => {
     expect(windows).toHaveLength(6);
     expect(windows[0]).toMatchObject({ block: 'with', analysisDays: [shiftDayKey(START, 2), shiftDayKey(START, 3), shiftDayKey(START, 4), shiftDayKey(START, 5), shiftDayKey(START, 6)] });
     expect(windows[1].analysisDays[0]).toBe(shiftDayKey(START, 7 + 2));
-    expect(windows.every(w => w.analysisDays)).toHaveLength(6);
+    expect(windows.every(w => w.analysisDays.length === BLOCK_DAYS - 2)).toBe(true);
   });
 
   it('ends 42 days after it starts', () => {
     expect(experimentEndDay(START)).toBe(shiftDayKey(START, BLOCKS * BLOCK_DAYS - 1));
+  });
+});
+
+describe('experimentProgress', () => {
+  const order: Block[] = ['with', 'without', 'with', 'without', 'with', 'without'];
+
+  it('is not started before the schedule begins', () => {
+    const p = experimentProgress(START, order, shiftDayKey(START, -1));
+    expect(p).toMatchObject({ currentBlockIndex: null, readyForAnalysis: false });
+  });
+
+  it('names the current block and day within it', () => {
+    const p = experimentProgress(START, order, shiftDayKey(START, 8)); // day index 8 -> block 1, day 2
+    expect(p).toMatchObject({ currentBlockIndex: 1, currentBlock: 'without', dayInBlock: 2 });
+  });
+
+  it('is ready for analysis exactly on and after the last scheduled day', () => {
+    const almostDone = experimentProgress(START, order, shiftDayKey(START, BLOCKS * BLOCK_DAYS - 2));
+    expect(almostDone.readyForAnalysis).toBe(false);
+    const lastDay = experimentProgress(START, order, shiftDayKey(START, BLOCKS * BLOCK_DAYS - 1));
+    expect(lastDay.readyForAnalysis).toBe(true);
+    expect(lastDay.currentBlockIndex).toBe(5); // still within the schedule's final day
+    expect(lastDay.daysRemaining).toBe(1);
+
+    const dayAfter = experimentProgress(START, order, shiftDayKey(START, BLOCKS * BLOCK_DAYS));
+    expect(dayAfter.currentBlockIndex).toBeNull();
+    expect(dayAfter.daysRemaining).toBe(0);
   });
 });
 

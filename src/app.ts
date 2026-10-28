@@ -16,6 +16,7 @@ import { logsRouter } from './routes/logs';
 import { syncRouter } from './routes/sync';
 import { mediaRouter } from './routes/media';
 import { insightsRouter } from './routes/insights';
+import { experimentsRouter } from './routes/experiments';
 import { reportsRouter } from './routes/reports';
 import { remindersRouter } from './routes/reminders';
 import { activitySessionsRouter } from './routes/activitySessions';
@@ -93,6 +94,7 @@ export function createApp(): Application {
   app.use(`${v1}/sync`,              syncRouter);
   app.use(`${v1}/media`,             mediaRouter);
   app.use(`${v1}/insights`,          insightsRouter);
+  app.use(`${v1}/experiments`,       experimentsRouter);
   app.use(`${v1}/reports`,           reportsRouter);
   app.use(`${v1}/reminders`,         remindersRouter);
   app.use(`${v1}/activity-sessions`, activitySessionsRouter);
