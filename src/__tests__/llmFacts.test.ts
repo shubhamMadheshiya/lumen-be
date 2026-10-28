@@ -1,5 +1,5 @@
-import { factsForFinding, factsForProgress, factsForWarning } from '../services/llm/facts';
-import type { FindingDto, ProgressDto } from '../services/insightPresenter';
+import { factsForFinding, factsForProgress, factsForStats, factsForWarning } from '../services/llm/facts';
+import type { DescriptiveStatDto, FindingDto, ProgressDto } from '../services/insightPresenter';
 
 const finding: FindingDto = {
   id: 'opt_dairy|opt_fatigue|1',
@@ -58,5 +58,24 @@ describe('factsForWarning', () => {
   it('states the track record when one exists', () => {
     const facts = factsForWarning({ alert: true, alertLevel: 1, level1Enabled: true, episodeCount: 6, loggedDays: 200, trackRecordFollowed: 10, trackRecordOf: 23 });
     expect(facts.some(f => f.numbers.includes(10) && f.numbers.includes(23))).toBe(true);
+  });
+});
+
+describe('factsForStats', () => {
+  const stats: DescriptiveStatDto[] = [
+    { key: 'sleep', icon: '😴', title: 'Average sleep', value: '6h 45m', sub: 'over the last 7 nights' },
+    { key: 'symptom-severity', icon: '🩺', title: 'Symptom severity', value: '3.2', sub: 'average this week, 4.1 the week before', trend: 'down' },
+  ];
+
+  it('turns every descriptive stat into a fact carrying its title and value', () => {
+    const facts = factsForStats(stats);
+    expect(facts).toHaveLength(2);
+    expect(facts.some(f => f.text.includes('Average sleep') && f.text.includes('6h 45m'))).toBe(true);
+    expect(facts.some(f => f.text.includes('Symptom severity') && f.text.includes('3.2') && f.text.includes('down'))).toBe(true);
+  });
+
+  it('gives Ask something to answer a sleep question from, which it would not have without this fact', () => {
+    const facts = factsForStats(stats);
+    expect(facts.some(f => /sleep/i.test(f.text))).toBe(true);
   });
 });

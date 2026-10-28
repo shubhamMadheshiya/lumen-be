@@ -4,7 +4,7 @@
  * to see. Nothing here reads raw log entries, free-text notes or database ids.
  */
 import crypto from 'crypto';
-import type { FindingDto, ProgressDto } from '../insightPresenter';
+import type { FindingDto, ProgressDto, DescriptiveStatDto } from '../insightPresenter';
 import type { InsightFact, FactKind } from './types';
 
 function randomFactId(): string {
@@ -51,6 +51,16 @@ export function factsForProgress(progress: ProgressDto): InsightFact[] {
     facts.push(fact('other', `A shift in the ${progress.recentShift.direction === 'up' ? 'worse' : 'better'} direction was recently detected.`));
   }
   return facts;
+}
+
+/**
+ * The "At a glance" stat cards (days logged, symptom severity, most logged symptom, average
+ * sleep, ...). These are the only place sleep, water and similar day-to-day numbers are already
+ * computed and verified, so Ask needs them too — otherwise "is my sleep getting better?" has
+ * nothing to work from even though Lumen already shows the answer elsewhere on the same screen.
+ */
+export function factsForStats(stats: DescriptiveStatDto[]): InsightFact[] {
+  return stats.map(s => fact('other', `${s.title}: ${s.value}${s.sub ? ` (${s.sub})` : ''}${s.trend ? `, trend ${s.trend}` : ''}.`));
 }
 
 export function factsForWarning(state: WarningStateLike): InsightFact[] {

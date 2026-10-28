@@ -21,7 +21,7 @@ import { z } from 'zod';
 import { explainFinding, explainProgress, explainWarning } from '../services/llm/explain';
 import { answerQuestion } from '../services/llm/ask';
 import { classifyQuestion, fixedReplyFor } from '../services/llm/router';
-import { factsForFinding, factsForProgress, factsForWarning } from '../services/llm/facts';
+import { factsForFinding, factsForProgress, factsForStats, factsForWarning } from '../services/llm/facts';
 
 export const insightsRouter = Router();
 insightsRouter.use(authenticate);
@@ -256,17 +256,25 @@ insightsRouter.post('/ask', async (req: AuthRequest, res: Response, next: NextFu
       return res.json({ success: true, data: { text: fixedReplyFor(route), source: 'template' } });
     }
 
-    const [storedFindings, rows, flareDayKeys, state] = await Promise.all([
+    const user = await User.findById(userId).select('preferences.timezone preferences.dayBoundaryHour').lean();
+    const prefs = {
+      timeZone: resolveTimeZone(user?.preferences?.timezone),
+      boundaryHour: user?.preferences?.dayBoundaryHour ?? DEFAULT_BOUNDARY_HOUR,
+    };
+
+    const [storedFindings, rows, flareDayKeys, state, stats] = await Promise.all([
       InsightFinding.find({ userId, shownTier: { $ne: 'still_learning' } }).limit(5).lean(),
       loadPersistedDayRows(userId),
       loadFlareDayKeys(userId),
       EarlyWarningState.findOne({ userId }).lean(),
+      buildDescriptiveStats(userId, new Date(), prefs),
     ]);
     const findings = await presentFindings(storedFindings);
     const progress = presentProgress(classifyTrend(weeklyMedians(rows)), goodBadDays(rows, flareDayKeys), regimeShifts(rows));
     const facts = [
       ...findings.flatMap(f => factsForFinding(f)),
       ...factsForProgress(progress),
+      ...factsForStats(stats),
       ...(state ? factsForWarning(state) : []),
     ];
     return res.json({ success: true, data: await answerQuestion(userId, question, facts) });

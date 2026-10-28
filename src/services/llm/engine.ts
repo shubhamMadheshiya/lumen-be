@@ -6,7 +6,7 @@
 import crypto from 'crypto';
 import { config } from '../../config';
 import { Narration } from '../../models/Narration';
-import { generateSentences, isGeminiConfigured } from './geminiClient';
+import { generateAnswer, generateSentences, isGeminiConfigured } from './geminiClient';
 import { validateNarration } from './validators';
 import type { InsightFact } from './types';
 
@@ -32,26 +32,53 @@ export interface NarrateOptions {
 
 export interface NarrateResult { text: string; source: 'ai' | 'template' }
 
-export async function narrate(opts: NarrateOptions): Promise<NarrateResult> {
+async function withCache(
+  opts: NarrateOptions,
+  produce: () => Promise<NarrateResult>,
+): Promise<NarrateResult> {
   const promptVersion = opts.promptVersion ?? 'v1';
   const hash = hashOf(opts.facts, promptVersion);
 
   const cached = await Narration.findOne({ userId: opts.userId, hash }).lean();
   if (cached) return { text: cached.text, source: cached.source };
 
-  const save = async (text: string, source: 'ai' | 'template'): Promise<NarrateResult> => {
-    await Narration.create({ userId: opts.userId, hash, text, source, llmModel: config.gemini.model }).catch(() => undefined);
-    return { text, source };
-  };
+  const result = await produce();
+  await Narration.create({ userId: opts.userId, hash, text: result.text, source: result.source, llmModel: config.gemini.model }).catch(() => undefined);
+  return result;
+}
 
-  if (!isGeminiConfigured()) return save(opts.fallbackText, 'template');
+export function narrate(opts: NarrateOptions): Promise<NarrateResult> {
+  return withCache(opts, async () => {
+    if (!isGeminiConfigured()) return { text: opts.fallbackText, source: 'template' };
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const result = await generateSentences(opts.systemPrompt, opts.userPrompt);
-    if (!result || result.sentences.length === 0) continue;
-    const check = validateNarration(result.sentences, opts.facts);
-    if (check.valid) return save(result.sentences.map(s => s.text).join(' '), 'ai');
-  }
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const result = await generateSentences(opts.systemPrompt, opts.userPrompt);
+      if (!result || result.sentences.length === 0) continue;
+      const check = validateNarration(result.sentences, opts.facts);
+      if (check.valid) return { text: result.sentences.map(s => s.text).join(' '), source: 'ai' };
+    }
 
-  return save(opts.fallbackText, 'template');
+    return { text: opts.fallbackText, source: 'template' };
+  });
+}
+
+/**
+ * Q&A variant: the model can honestly say it doesn't have enough to answer (`answerable: false`)
+ * without being forced to fabricate a citation for that sentence — see geminiClient.ts for why.
+ */
+export function narrateAsk(opts: NarrateOptions): Promise<NarrateResult> {
+  return withCache(opts, async () => {
+    if (!isGeminiConfigured()) return { text: opts.fallbackText, source: 'template' };
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const result = await generateAnswer(opts.systemPrompt, opts.userPrompt);
+      if (!result) continue;
+      if (!result.answerable) return { text: opts.fallbackText, source: 'template' };
+      if (result.sentences.length === 0) continue;
+      const check = validateNarration(result.sentences, opts.facts);
+      if (check.valid) return { text: result.sentences.map(s => s.text).join(' '), source: 'ai' };
+    }
+
+    return { text: opts.fallbackText, source: 'template' };
+  });
 }

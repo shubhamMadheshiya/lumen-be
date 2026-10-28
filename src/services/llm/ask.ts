@@ -6,7 +6,7 @@
  * ./router.ts — and that check always runs first in the route handler.
  */
 import crypto from 'crypto';
-import { narrate, NarrateResult } from './engine';
+import { narrateAsk, NarrateResult } from './engine';
 import { ASK_FALLBACK_TEXT } from './templates';
 import type { InsightFact } from './types';
 
@@ -14,8 +14,8 @@ const SYSTEM_PROMPT = `You answer a question about someone's own health-tracking
 
 Rules you must follow exactly:
 - Only state numbers and facts that appear in the given facts list. Never invent, estimate, or look up anything outside it.
-- If the facts given don't actually answer the question, say so plainly in one sentence rather than guessing — do not pad with unrelated facts.
-- Every sentence must cite the factIds it is built from.
+- First decide if the given facts actually answer the question. If they do, set answerable to true and write 1-3 short sentences, each citing the factIds it is built from.
+- If the given facts do NOT cover what's being asked (for example, nothing about it appears in the facts list at all), set answerable to false and leave sentences empty — do not guess, pad with unrelated facts, or write an apology sentence instead.
 - Never say or imply that one thing caused, triggers, or leads to another. These are observed patterns in logs, nothing more.
 - Never tell the person to start, stop, increase, or decrease any medicine or dose.
 - Never diagnose, name a condition, or say what a symptom means medically.
@@ -27,5 +27,5 @@ export function answerQuestion(userId: string, question: string, facts: InsightF
   // The cache key is (facts, promptVersion, model) — the question text has to be folded into
   // promptVersion, or two different questions over the same facts would collide in the cache.
   const questionHash = crypto.createHash('sha256').update(question.trim().toLowerCase()).digest('hex').slice(0, 16);
-  return narrate({ userId, facts, fallbackText: ASK_FALLBACK_TEXT, systemPrompt: SYSTEM_PROMPT, userPrompt, promptVersion: `ask-v1:${questionHash}` });
+  return narrateAsk({ userId, facts, fallbackText: ASK_FALLBACK_TEXT, systemPrompt: SYSTEM_PROMPT, userPrompt, promptVersion: `ask-v1:${questionHash}` });
 }

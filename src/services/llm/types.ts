@@ -30,3 +30,9 @@ export interface NarrationSentence {
 export interface NarrationResult {
   sentences: NarrationSentence[];
 }
+
+/** Q&A's response shape: `answerable: false` means the given facts don't cover the question. */
+export interface AskResult {
+  answerable: boolean;
+  sentences: NarrationSentence[];
+}
