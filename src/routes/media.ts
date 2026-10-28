@@ -12,6 +12,7 @@ mediaRouter.use(authenticate);
 
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic',
+  'application/pdf',
 ]);
 
 // POST /media/upload-url — get a pre-signed S3 PUT URL

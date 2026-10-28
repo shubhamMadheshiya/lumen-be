@@ -825,4 +825,48 @@ export interface IDiscordUserProfile {
   };
 }
 
+// ────────── Health Records & Prescriptions ──────────
+
+export type HealthRecordType = 'blood_test' | 'doctor_prescription' | 'imaging' | 'doctor_note';
+
+export interface IBiomarker {
+  name: string;
+  value: string;
+  unit?: string;
+  referenceRange?: string;
+  flag?: 'normal' | 'high' | 'low' | 'critical';
+}
+
+export interface IPrescribedMedication {
+  name: string;
+  dosage?: string;
+  frequency?: string;
+  instructions?: string;
+  startDate?: string;
+  endDate?: string;
+  isActive?: boolean;
+  refills?: number;
+}
+
+export interface IHealthRecord {
+  _id: string;
+  userId: string;
+  title: string;
+  type: HealthRecordType;
+  date: string;
+  doctorName?: string;
+  clinicOrLab?: string;
+  mediaIds: string[];
+  fileUrls?: string[];
+  localFileUris?: string[];
+  fileNames?: string[];
+  notes?: string;
+  isSensitive?: boolean;
+  biomarkers?: IBiomarker[];
+  medications?: IPrescribedMedication[];
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 
