@@ -53,7 +53,10 @@ export async function loadDayRows(userId: string): Promise<{ rows: DayRow[]; tim
     source: e.source,
     categoryId: e.categoryId ? id(e.categoryId) : undefined,
     quickActionId: e.quickActionId ? id(e.quickActionId) : undefined,
-    answers: (e.answers ?? []) as EntryInput['answers'],
+    answers: (e.answers ?? []).map((a: any) => ({
+      ...a,
+      optionId: String(a.optionId ?? ''),
+    })),
   }));
 
   const rows = buildDayRows({

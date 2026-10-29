@@ -47,8 +47,8 @@ export function createApp(): Application {
   app.use(limiter);
 
   // ── Body parsing ──────────────────────────────
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '30mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '30mb' }));
   app.use(compression());
 
   // ── Logging ───────────────────────────────────

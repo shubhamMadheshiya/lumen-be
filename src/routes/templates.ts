@@ -103,7 +103,7 @@ async function ensureSeedCommunityTemplates(defaultUserId: string) {
                   label: 'Brain Fog',
                   icon: '🌫️',
                   allowComment: true,
-                  captureTime: 'auto_now',
+                  captureTime: 'user_picks',
                   fields: [
                     {
                       key: 'severity',
@@ -121,7 +121,7 @@ async function ensureSeedCommunityTemplates(defaultUserId: string) {
                   label: 'Lightheadedness / Dizziness',
                   icon: '💫',
                   allowComment: true,
-                  captureTime: 'auto_now',
+                  captureTime: 'user_picks',
                   fields: [
                     {
                       key: 'severity',
@@ -138,7 +138,7 @@ async function ensureSeedCommunityTemplates(defaultUserId: string) {
                   label: 'Heart Palpitations / Tachycardia',
                   icon: '💓',
                   allowComment: true,
-                  captureTime: 'auto_now',
+                  captureTime: 'user_picks',
                   fields: [
                     {
                       key: 'bpm',
@@ -207,7 +207,7 @@ async function ensureSeedCommunityTemplates(defaultUserId: string) {
                   label: 'Throbbing Headache',
                   icon: '🤕',
                   allowComment: true,
-                  captureTime: 'auto_now',
+                  captureTime: 'user_picks',
                   fields: [
                     {
                       key: 'severity',
@@ -224,7 +224,7 @@ async function ensureSeedCommunityTemplates(defaultUserId: string) {
                   label: 'Visual Aura / Scintillating Scotoma',
                   icon: '👁️',
                   allowComment: true,
-                  captureTime: 'auto_now',
+                  captureTime: 'user_picks',
                 },
                 {
                   label: 'Photophobia / Light Sensitivity',

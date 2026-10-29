@@ -135,19 +135,20 @@ function classify(e: EntryInput, input: DayTableInput): Classified {
   // The "Flare now" quick tap is the member saying they are flaring
   if (out.isSymptom && qa && FLARE_TAP_LABEL.test(qa.label)) out.explicitFlare = true;
   for (const a of e.answers ?? []) {
-    if (a.optionId === NO_SYMPTOMS_OPTION_ID) out.noSymptoms = true;
-    if (a.optionId === FEELING_FLARE_OPTION_ID) out.explicitFlare = true;
+    const optId = String(a.optionId ?? '');
+    if (optId === NO_SYMPTOMS_OPTION_ID) out.noSymptoms = true;
+    if (optId === FEELING_FLARE_OPTION_ID) out.explicitFlare = true;
     const range = (a.values ?? []).find(v => v.dataType === 'range');
-    if (a.optionId === PATIENT_GLOBAL_OPTION_ID) {
+    if (optId === PATIENT_GLOBAL_OPTION_ID) {
       const g = range ? num(range.canonicalValue ?? range.value) : null;
       if (g !== null) out.patientGlobal = Math.min(10, Math.max(0, g));
     }
     if (out.isSymptom) {
       const sev = range ? num(range.canonicalValue ?? range.value) : null;
       if (sev !== null) severities.push(sev);
-      if (!a.optionId.includes(':')) out.symptoms.push({ key: `opt_${a.optionId}`, label: a.optionLabelSnapshot, max: sev });
+      if (optId && !optId.includes(':')) out.symptoms.push({ key: `opt_${optId}`, label: a.optionLabelSnapshot, max: sev });
     }
-    if (out.isExposure && !a.optionId.includes(':')) out.exposureKeys.push({ key: `opt_${a.optionId}`, label: a.optionLabelSnapshot });
+    if (out.isExposure && optId && !optId.includes(':')) out.exposureKeys.push({ key: `opt_${optId}`, label: a.optionLabelSnapshot });
   }
   out.severities = severities;
 

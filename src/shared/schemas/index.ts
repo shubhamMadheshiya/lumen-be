@@ -80,7 +80,7 @@ export const CreateQuestionSchema = z.object({
   selectionType: z.enum(['single', 'multiple']),
   allowOther: z.boolean().default(false),
   required: z.boolean().default(false),
-  frequency: z.enum(['anytime', 'once_per_day', 'per_meal', 'morning', 'evening']).default('anytime'),
+  frequency: z.enum(['anytime', 'once_per_day', 'morning', 'evening']).default('anytime'),
   conditionalDisplay: ConditionalDisplaySchema.optional(),
   order: z.number().int().min(0).optional(),
 });
@@ -327,7 +327,7 @@ export const CreateCommunityTemplateSchema = z.object({
           selectionType: z.enum(['single', 'multiple']).default('single'),
           allowOther: z.boolean().default(false),
           required: z.boolean().default(false),
-          frequency: z.enum(['anytime', 'once_per_day', 'per_meal', 'morning', 'evening']).default('anytime'),
+          frequency: z.enum(['anytime', 'once_per_day', 'morning', 'evening']).default('anytime'),
           options: z.array(
             z.object({
               label: z.string().min(1).max(100),

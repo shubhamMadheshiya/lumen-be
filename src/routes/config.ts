@@ -56,6 +56,11 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
       QuickAction.find({ userId }).sort({ order: 1 }),
       CustomUnit.find({ userId }).sort({ symbol: 1 }),
     ]);
+    options.forEach((o) => {
+      if (o.captureTime === 'auto_now' || (o.captureTime as any) === 'auto') {
+        o.captureTime = 'user_picks';
+      }
+    });
     res.json({
       success: true,
       data: { configVersion: user?.configVersion ?? 1, categories, questions, options, quickActions, customUnits },
@@ -173,7 +178,7 @@ configRouter.post('/import', async (req: AuthRequest, res: Response, next: NextF
           icon: opt.icon,
           color: opt.color,
           allowComment: opt.allowComment ?? false,
-          captureTime: opt.captureTime ?? 'none',
+          captureTime: (opt.captureTime === 'auto_now' || opt.captureTime === 'auto') ? 'user_picks' : (opt.captureTime ?? 'none'),
           fields: opt.fields ?? [],
           order: opt.order ?? 0,
           isActive: opt.isActive ?? true,
@@ -245,6 +250,15 @@ configRouter.get('/categories', async (req: AuthRequest, res: Response, next: Ne
   try {
     const docs = await Category.find({ userId: uid(req) }).sort({ order: 1 });
     res.json({ success: true, data: docs });
+  } catch (err) { next(err); }
+});
+
+configRouter.patch('/categories/reorder', validate(ReorderSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { ids } = req.body as { ids: string[] };
+    await Promise.all(ids.map((id, i) => Category.updateOne({ _id: id, userId: uid(req) }, { order: i })));
+    await bumpConfig(req.userId!);
+    res.json({ success: true });
   } catch (err) { next(err); }
 });
 
@@ -323,15 +337,6 @@ configRouter.delete('/categories/:id', async (req: AuthRequest, res: Response, n
   } catch (err) { next(err); }
 });
 
-configRouter.patch('/categories/reorder', validate(ReorderSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { ids } = req.body as { ids: string[] };
-    await Promise.all(ids.map((id, i) => Category.updateOne({ _id: id, userId: uid(req) }, { order: i })));
-    await bumpConfig(req.userId!);
-    res.json({ success: true });
-  } catch (err) { next(err); }
-});
-
 // ═══════════════════════════════════════════════
 //  QUESTIONS
 // ═══════════════════════════════════════════════
@@ -352,6 +357,15 @@ configRouter.get('/questions', async (req: AuthRequest, res: Response, next: Nex
     if (req.query.categoryId) filter.categoryId = req.query.categoryId;
     const docs = await Question.find(filter).sort({ order: 1 });
     res.json({ success: true, data: docs });
+  } catch (err) { next(err); }
+});
+
+configRouter.patch('/questions/reorder', validate(ReorderSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { ids } = req.body as { ids: string[] };
+    await Promise.all(ids.map((id, i) => Question.updateOne({ _id: id, userId: uid(req) }, { order: i })));
+    await bumpConfig(req.userId!);
+    res.json({ success: true });
   } catch (err) { next(err); }
 });
 
@@ -414,6 +428,7 @@ configRouter.delete('/questions/:id', async (req: AuthRequest, res: Response, ne
     if (logCount > 0) {
       return res.status(400).json({
         success: false,
+        message: `Cannot permanently delete "${question.title}": it has ${logCount} logged tracking entries. Please keep it archived instead.`,
         error: `Cannot permanently delete "${question.title}": it has ${logCount} logged tracking entries. Please keep it archived instead.`,
         hasLogs: true,
         logCount,
@@ -428,15 +443,6 @@ configRouter.delete('/questions/:id', async (req: AuthRequest, res: Response, ne
   } catch (err) { next(err); }
 });
 
-configRouter.patch('/questions/reorder', validate(ReorderSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { ids } = req.body as { ids: string[] };
-    await Promise.all(ids.map((id, i) => Question.updateOne({ _id: id, userId: uid(req) }, { order: i })));
-    await bumpConfig(req.userId!);
-    res.json({ success: true });
-  } catch (err) { next(err); }
-});
-
 // ═══════════════════════════════════════════════
 //  OPTIONS
 // ═══════════════════════════════════════════════
@@ -445,7 +451,11 @@ configRouter.post('/options', validate(CreateOptionSchema), async (req: AuthRequ
   try {
     const userId = uid(req);
     const count = await Option.countDocuments({ userId, questionId: req.body.questionId });
-    const doc = await Option.create({ ...req.body, userId, order: req.body.order ?? count });
+    const body = { ...req.body };
+    if (body.captureTime === 'auto_now' || body.captureTime === 'auto') {
+      body.captureTime = 'user_picks';
+    }
+    const doc = await Option.create({ ...body, userId, order: req.body.order ?? count });
     await bumpConfig(req.userId!);
     res.status(201).json({ success: true, data: doc });
   } catch (err) { next(err); }
@@ -456,7 +466,21 @@ configRouter.get('/options', async (req: AuthRequest, res: Response, next: NextF
     const filter: Record<string, unknown> = { userId: uid(req) };
     if (req.query.questionId) filter.questionId = req.query.questionId;
     const docs = await Option.find(filter).sort({ order: 1 });
+    docs.forEach((o) => {
+      if (o.captureTime === 'auto_now' || (o.captureTime as any) === 'auto') {
+        o.captureTime = 'user_picks';
+      }
+    });
     res.json({ success: true, data: docs });
+  } catch (err) { next(err); }
+});
+
+configRouter.patch('/options/reorder', validate(ReorderSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { ids } = req.body as { ids: string[] };
+    await Promise.all(ids.map((id, i) => Option.updateOne({ _id: id, userId: uid(req) }, { order: i })));
+    await bumpConfig(req.userId!);
+    res.json({ success: true });
   } catch (err) { next(err); }
 });
 
@@ -468,9 +492,14 @@ configRouter.patch('/options/:id', validate(UpdateOptionSchema), async (req: Aut
 
     await Question.updateOne({ _id: existing.questionId, userId: uid(req) }, { $inc: { version: 1 } });
 
+    const body = { ...req.body };
+    if (body.captureTime === 'auto_now' || body.captureTime === 'auto') {
+      body.captureTime = 'user_picks';
+    }
+
     const doc = await Option.findOneAndUpdate(
       { _id: req.params.id, userId: uid(req) },
-      req.body,
+      body,
       { new: true },
     );
     await bumpConfig(req.userId!);
@@ -536,15 +565,6 @@ configRouter.delete('/options/:id', async (req: AuthRequest, res: Response, next
   } catch (err) { next(err); }
 });
 
-configRouter.patch('/options/reorder', validate(ReorderSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { ids } = req.body as { ids: string[] };
-    await Promise.all(ids.map((id, i) => Option.updateOne({ _id: id, userId: uid(req) }, { order: i })));
-    await bumpConfig(req.userId!);
-    res.json({ success: true });
-  } catch (err) { next(err); }
-});
-
 // ═══════════════════════════════════════════════
 //  QUICK ACTIONS
 // ═══════════════════════════════════════════════
@@ -563,6 +583,15 @@ configRouter.get('/quick-actions', async (req: AuthRequest, res: Response, next:
   try {
     const docs = await QuickAction.find({ userId: uid(req) }).sort({ order: 1 });
     res.json({ success: true, data: docs });
+  } catch (err) { next(err); }
+});
+
+configRouter.patch('/quick-actions/reorder', validate(ReorderSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { ids } = req.body as { ids: string[] };
+    await Promise.all(ids.map((id, i) => QuickAction.updateOne({ _id: id, userId: uid(req) }, { order: i })));
+    await bumpConfig(req.userId!);
+    res.json({ success: true });
   } catch (err) { next(err); }
 });
 
@@ -630,15 +659,6 @@ configRouter.delete('/quick-actions/:id', async (req: AuthRequest, res: Response
     await bumpConfig(req.userId!);
 
     res.json({ success: true, message: `Quick action "${action.label}" deleted permanently.` });
-  } catch (err) { next(err); }
-});
-
-configRouter.patch('/quick-actions/reorder', validate(ReorderSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { ids } = req.body as { ids: string[] };
-    await Promise.all(ids.map((id, i) => QuickAction.updateOne({ _id: id, userId: uid(req) }, { order: i })));
-    await bumpConfig(req.userId!);
-    res.json({ success: true });
   } catch (err) { next(err); }
 });
 

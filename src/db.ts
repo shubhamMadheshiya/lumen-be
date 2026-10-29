@@ -21,6 +21,22 @@ export async function connectDB(): Promise<void> {
     serverSelectionTimeoutMS: 5000,
   });
   console.log('[db] MongoDB connected');
+
+  // Automatic migration: migrate any legacy 'auto_now' / 'auto' options to 'user_picks'
+  try {
+    const db = mongoose.connection.db;
+    if (db) {
+      const res = await db.collection('options').updateMany(
+        { captureTime: { $in: ['auto_now', 'auto'] } },
+        { $set: { captureTime: 'user_picks' } }
+      );
+      if (res.modifiedCount > 0) {
+        console.log(`[db] Migrated ${res.modifiedCount} options to user_picks`);
+      }
+    }
+  } catch (err) {
+    console.warn('[db] captureTime migration skipped:', err);
+  }
 }
 
 export async function disconnectDB(): Promise<void> {

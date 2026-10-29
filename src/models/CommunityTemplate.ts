@@ -78,7 +78,7 @@ const QuestionSchema = new Schema(
     required: { type: Boolean, default: false },
     frequency: {
       type: String,
-      enum: ['anytime', 'once_per_day', 'per_meal', 'morning', 'evening'],
+      enum: ['anytime', 'once_per_day', 'morning', 'evening'],
       default: 'anytime',
     },
     options: [OptionSchema],

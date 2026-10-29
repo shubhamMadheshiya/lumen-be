@@ -5,9 +5,28 @@ import { HealthRecord } from '../models/HealthRecord';
 import { Media } from '../models/Media';
 import { getDownloadUrl } from '../utils/s3';
 import { AppError } from '../utils/errors';
+import { parseMedicalReport } from '../services/llm/reportParser';
 
 export const recordsRouter = Router();
 recordsRouter.use(authenticate);
+
+// POST /api/v1/records/parse-report - AI extraction from PDF, image or report text
+recordsRouter.post('/parse-report', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { fileBase64, mimeType, fileText } = req.body;
+    if (!fileBase64 && !fileText) {
+      throw AppError.badRequest('Either fileBase64 or fileText must be provided for AI report parsing.');
+    }
+    const parsedData = await parseMedicalReport({
+      fileBase64,
+      mimeType: mimeType || 'application/pdf',
+      fileText,
+    });
+    res.json({ success: true, data: parsedData });
+  } catch (err) {
+    next(err);
+  }
+});
 
 function uid(req: AuthRequest): mongoose.Types.ObjectId {
   return new mongoose.Types.ObjectId(req.userId!);

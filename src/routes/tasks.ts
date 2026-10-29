@@ -141,7 +141,15 @@ tasksRouter.get('/suggestions', async (req: AuthRequest, res: Response, next: Ne
 tasksRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = uid(req);
-    const { filter, listId, energyCost, includeCompleted, search } = req.query;
+    const { filter, listId, energyCost, includeCompleted, search, today } = req.query;
+
+    if (today && typeof today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(today)) {
+      // Auto-prune tasks from previous tracking days to maintain clean slate in sync with client
+      await Task.updateMany(
+        { userId, inMyDay: true, myDayDate: { $exists: true, $ne: today } },
+        { $set: { inMyDay: false } }
+      );
+    }
 
     const query: Record<string, unknown> = { userId };
 

@@ -29,7 +29,7 @@ export interface TemplateQuestion {
   selectionType: 'single' | 'multiple';
   allowOther: boolean;
   required: boolean;
-  frequency: 'anytime' | 'once_per_day' | 'per_meal' | 'morning' | 'evening';
+  frequency: 'anytime' | 'once_per_day' | 'morning' | 'evening';
   order: number;
   options: TemplateOption[];
 }
@@ -275,10 +275,10 @@ const categoryFood: TemplateCategory = {
       frequency: 'anytime',
       order: 1,
       options: [
-        { templateKey: 'opt_breakfast', label: 'Breakfast', icon: '🌅', color: '#FFA726', allowComment: false, captureTime: 'auto_now', order: 1, fields: [] },
-        { templateKey: 'opt_lunch',     label: 'Lunch',     icon: '☀️', color: '#FFCA28', allowComment: false, captureTime: 'auto_now', order: 2, fields: [] },
-        { templateKey: 'opt_dinner',    label: 'Dinner',    icon: '🌙', color: '#5C6BC0', allowComment: false, captureTime: 'auto_now', order: 3, fields: [] },
-        { templateKey: 'opt_snack',     label: 'Snack',     icon: '🍎', color: '#26A69A', allowComment: false, captureTime: 'auto_now', order: 4, fields: [] },
+        { templateKey: 'opt_breakfast', label: 'Breakfast', icon: '🌅', color: '#FFA726', allowComment: false, captureTime: 'user_picks', order: 1, fields: [] },
+        { templateKey: 'opt_lunch',     label: 'Lunch',     icon: '☀️', color: '#FFCA28', allowComment: false, captureTime: 'user_picks', order: 2, fields: [] },
+        { templateKey: 'opt_dinner',    label: 'Dinner',    icon: '🌙', color: '#5C6BC0', allowComment: false, captureTime: 'user_picks', order: 3, fields: [] },
+        { templateKey: 'opt_snack',     label: 'Snack',     icon: '🍎', color: '#26A69A', allowComment: false, captureTime: 'user_picks', order: 4, fields: [] },
       ],
     },
     {
@@ -289,7 +289,7 @@ const categoryFood: TemplateCategory = {
       selectionType: 'multiple',
       allowOther: true,
       required: false,
-      frequency: 'per_meal',
+      frequency: 'anytime',
       order: 2,
       options: [
         { templateKey: 'opt_gluten',      label: 'Gluten / wheat',     icon: '🌾', color: '#D7CCC8', allowComment: true, captureTime: 'none', order: 1,
@@ -420,11 +420,11 @@ const categoryMedications: TemplateCategory = {
       frequency: 'anytime',
       order: 1,
       options: [
-        { templateKey: 'opt_med_taken', label: 'Taken as prescribed', icon: '✅', color: '#66BB6A', allowComment: false, captureTime: 'auto_now', order: 1,
+        { templateKey: 'opt_med_taken', label: 'Taken as prescribed', icon: '✅', color: '#66BB6A', allowComment: false, captureTime: 'user_picks', order: 1,
           fields: [{ key: 'name', label: 'Medication name', dataType: 'string', displayAs: 'text', required: true }] },
-        { templateKey: 'opt_med_missed', label: 'Missed dose', icon: '❌', color: '#EF5350', allowComment: true, captureTime: 'auto_now', order: 2,
+        { templateKey: 'opt_med_missed', label: 'Missed dose', icon: '❌', color: '#EF5350', allowComment: true, captureTime: 'user_picks', order: 2,
           fields: [{ key: 'name', label: 'Medication name', dataType: 'string', displayAs: 'text', required: true }] },
-        { templateKey: 'opt_med_extra', label: 'Extra / rescue dose', icon: '➕', color: '#FF7043', allowComment: true, captureTime: 'auto_now', order: 3,
+        { templateKey: 'opt_med_extra', label: 'Extra / rescue dose', icon: '➕', color: '#FF7043', allowComment: true, captureTime: 'user_picks', order: 3,
           fields: [{ key: 'name', label: 'Medication name', dataType: 'string', displayAs: 'text', required: true }] },
       ],
     },
@@ -459,7 +459,7 @@ const categoryBodyOutput: TemplateCategory = {
           icon: '💩',
           color: '#8D6E63',
           allowComment: true,
-          captureTime: 'auto_now',
+          captureTime: 'user_picks',
           order: 1,
           fields: [
             { key: 'bristol', label: 'Bristol scale', dataType: 'enum', displayAs: 'image-grid', enumValues: BRISTOL_SCALE },
@@ -486,7 +486,7 @@ const categoryBodyOutput: TemplateCategory = {
           icon: '🫧',
           color: '#FFF9C4',
           allowComment: true,
-          captureTime: 'auto_now',
+          captureTime: 'user_picks',
           order: 1,
           fields: [
             { key: 'color', label: 'Colour', dataType: 'enum', displayAs: 'color-swatch', enumValues: URINE_COLOR },
@@ -552,19 +552,19 @@ const categoryVitals: TemplateCategory = {
       frequency: 'anytime',
       order: 1,
       options: [
-        { templateKey: 'opt_weight', label: 'Weight', icon: '⚖️', color: '#42A5F5', allowComment: false, captureTime: 'auto_now', order: 1,
+        { templateKey: 'opt_weight', label: 'Weight', icon: '⚖️', color: '#42A5F5', allowComment: false, captureTime: 'user_picks', order: 1,
           fields: [{ key: 'weight', label: 'Weight', dataType: 'number', unit: 'kg', allowedUnits: ['kg', 'lb'], displayAs: 'stepper', min: 20, max: 300, step: 0.1 }] },
-        { templateKey: 'opt_temp', label: 'Body temperature', icon: '🌡️', color: '#FF7043', allowComment: false, captureTime: 'auto_now', order: 2,
+        { templateKey: 'opt_temp', label: 'Body temperature', icon: '🌡️', color: '#FF7043', allowComment: false, captureTime: 'user_picks', order: 2,
           fields: [{ key: 'temperature', label: 'Temperature', dataType: 'temperature', unit: '°C', allowedUnits: ['°C', '°F'], displayAs: 'stepper', min: 35, max: 42, step: 0.1 }] },
-        { templateKey: 'opt_bp', label: 'Blood pressure', icon: '💓', color: '#EF5350', allowComment: false, captureTime: 'auto_now', order: 3,
+        { templateKey: 'opt_bp', label: 'Blood pressure', icon: '💓', color: '#EF5350', allowComment: false, captureTime: 'user_picks', order: 3,
           fields: [
             { key: 'systolic', label: 'Systolic', dataType: 'number', unit: 'mmHg', displayAs: 'stepper', min: 60, max: 250, step: 1 },
             { key: 'diastolic', label: 'Diastolic', dataType: 'number', unit: 'mmHg', displayAs: 'stepper', min: 40, max: 150, step: 1 },
           ],
         },
-        { templateKey: 'opt_hr', label: 'Heart rate', icon: '💙', color: '#26C6DA', allowComment: false, captureTime: 'auto_now', order: 4,
+        { templateKey: 'opt_hr', label: 'Heart rate', icon: '💙', color: '#26C6DA', allowComment: false, captureTime: 'user_picks', order: 4,
           fields: [{ key: 'bpm', label: 'BPM', dataType: 'number', unit: 'bpm', displayAs: 'stepper', min: 30, max: 220, step: 1 }] },
-        { templateKey: 'opt_glucose', label: 'Blood glucose', icon: '🩸', color: '#FF8A65', allowComment: false, captureTime: 'auto_now', order: 5,
+        { templateKey: 'opt_glucose', label: 'Blood glucose', icon: '🩸', color: '#FF8A65', allowComment: false, captureTime: 'user_picks', order: 5,
           fields: [{ key: 'glucose', label: 'Glucose', dataType: 'number', unit: 'mg/dL', allowedUnits: ['mg/dL', 'mmol/L'], displayAs: 'stepper', min: 30, max: 600, step: 0.1 }] },
       ],
     },

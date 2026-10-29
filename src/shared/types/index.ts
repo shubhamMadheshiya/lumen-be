@@ -35,7 +35,7 @@ export type SelectionType = 'single' | 'multiple';
 export type CaptureTime = 'none' | 'auto_now' | 'user_picks';
 export type QuickActionMode = 'counter' | 'timer' | 'toggle';
 export type CategoryRole = 'trigger_candidate' | 'symptom' | 'context';
-export type QuestionFrequency = 'anytime' | 'once_per_day' | 'per_meal' | 'morning' | 'evening';
+export type QuestionFrequency = 'anytime' | 'once_per_day' | 'morning' | 'evening';
 export type LogSource = 'quick_action' | 'questionnaire' | 'check_in' | 'reminder' | 'activity';
 export type ReminderType = 'time' | 'inactivity';
 
@@ -534,7 +534,7 @@ export interface CommunityTemplateQuestion {
   selectionType: 'single' | 'multiple';
   allowOther?: boolean;
   required?: boolean;
-  frequency?: 'anytime' | 'once_per_day' | 'per_meal' | 'morning' | 'evening';
+  frequency?: 'anytime' | 'once_per_day' | 'morning' | 'evening';
   options: CommunityTemplateOption[];
 }
 

@@ -10,7 +10,7 @@ export interface IQuestionDoc extends Document {
   selectionType: 'single' | 'multiple';
   allowOther: boolean;
   required: boolean;
-  frequency: 'anytime' | 'once_per_day' | 'per_meal' | 'morning' | 'evening';
+  frequency: 'anytime' | 'once_per_day' | 'morning' | 'evening';
   conditionalDisplay?: {
     questionId: mongoose.Types.ObjectId;
     optionId: mongoose.Types.ObjectId;
@@ -35,7 +35,7 @@ const QuestionSchema = new Schema<IQuestionDoc>(
     selectionType: { type: String, enum: ['single', 'multiple'], required: true },
     allowOther:  { type: Boolean, default: false },
     required:    { type: Boolean, default: false },
-    frequency:   { type: String, enum: ['anytime', 'once_per_day', 'per_meal', 'morning', 'evening'], default: 'anytime' },
+    frequency:   { type: String, enum: ['anytime', 'once_per_day', 'morning', 'evening'], default: 'anytime' },
     conditionalDisplay: {
       questionId: { type: Schema.Types.ObjectId },
       optionId:   { type: Schema.Types.ObjectId },

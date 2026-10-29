@@ -54,16 +54,21 @@ insightsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFuncti
       await computeInsights(key).catch(err => console.error('[insights] first compute error:', err));
     }
 
-    const [observedDays, storedFindings, stored, lastRun] = await Promise.all([
+    let [observedDays, storedFindings, stored, lastRun] = await Promise.all([
       DayFeature.countDocuments({ userId, symptomObserved: true }),
       InsightFinding.find({ userId, $or: [{ shownTier: { $ne: 'still_learning' } }, { noLongerSeen: true }] }).lean(),
       InsightResult.find({ userId }).sort({ computedAt: -1 }).limit(100),
       InsightRun.findOne({ userId }).sort({ ranAt: -1 }).lean(),
     ]);
-    const progress = { observedDays, daysNeeded: OBSERVED_DAYS_NEEDED, comparisons: lastRun?.eligibleTests ?? 0 };
+
+    if (observedDays === 0) {
+      const activeDayCount = await DayFeature.countDocuments({ userId, $or: [{ symptomObserved: true }, { exposureObserved: true }] });
+      if (activeDayCount > 0) observedDays = activeDayCount;
+    }
 
     const daysOfData = Math.max(0, Math.floor((Date.now() - firstEntry.occurredAt.getTime()) / 86400000));
     if (daysOfData < DAYS_NEEDED) {
+      const progress = { observedDays, daysNeeded: OBSERVED_DAYS_NEEDED, comparisons: lastRun?.eligibleTests ?? 0 };
       return res.json({
         success: true,
         data: {
@@ -83,6 +88,16 @@ insightsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFuncti
       presentFindings(storedFindings, DEFAULT_CONFIG.weakShareFlag),
       buildDescriptiveStats(key, new Date(), prefs),
     ]);
+
+    if (observedDays === 0) {
+      const loggedDaysStat = stats.find(s => s.key === 'days-logged');
+      if (loggedDaysStat?.value) {
+        const m = loggedDaysStat.value.match(/^(\d+)/);
+        if (m) observedDays = parseInt(m[1], 10);
+      }
+    }
+    const progress = { observedDays, daysNeeded: OBSERVED_DAYS_NEEDED, comparisons: lastRun?.eligibleTests ?? 0 };
+
     res.json({
       success: true,
       data: {
