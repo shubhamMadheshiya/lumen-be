@@ -1,0 +1,1045 @@
+{
+  "Ana_autoimnobot_22-09-26.pdf": {
+    "error": "AI report parsing failed: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent: [400 Bad Request] Request contains an invalid argument."
+  },
+  "Ana_screening_19-09-26.pdf": {
+    "title": "Anti Nuclear Antibody / Factor (ANA/ANF), Serum",
+    "recordType": "blood_test",
+    "date": "2026-09-19",
+    "doctorName": "Dr Awantika Tiwari, MD",
+    "clinicOrLab": "Dr Lal PathLabs",
+    "notes": "Anti Nuclear Antibody (ANA/ANF) test resulted in 20.65 Units, which is classified as a moderate positive result (Reference: <20.00 Units is Negative, 20-60 Units is Moderate positive, >60 Units is Strong positive). ANA screening is used for identifying autoantibodies associated with connective tissue and autoimmune diseases.",
+    "biomarkers": [
+      {
+        "name": "Anti Nuclear Antibody / Factor (ANA/ANF), Serum",
+        "value": "20.65",
+        "unit": "Units",
+        "referenceRange": "<20.00",
+        "flag": "high"
+      }
+    ],
+    "medications": []
+  },
+  "Full-body-27-01-26.pdf": {
+    "title": "SwasthFit Super 4 Health Package",
+    "recordType": "blood_test",
+    "date": "2026-01-27",
+    "doctorName": "Dr Mattaparti Sridevi, MD",
+    "clinicOrLab": "Dr Lal PathLabs",
+    "notes": "Patient presents with several key nutritional and metabolic abnormalities: severe Vitamin B12 deficiency (<105 pg/mL) and Vitamin D deficiency (10.96 nmol/L). Elevated HbA1c (5.9%) indicates prediabetes risk. Dyslipidemia noted with elevated LDL (122.05 mg/dL) and Non-HDL cholesterol (150 mg/dL). Mildly elevated serum Uric Acid (7.80 mg/dL), Phosphorus (4.78 mg/dL), Globulin (3.57 gm/dL), and Red Cell Distribution Width (14.40%). Serum Creatinine is slightly low (0.66 mg/dL). CBC, Thyroid Profile, and Liver Enzymes are otherwise within normal limits.",
+    "biomarkers": [
+      {
+        "name": "Creatinine",
+        "value": "0.66",
+        "unit": "mg/dL",
+        "referenceRange": "0.67 - 1.17",
+        "flag": "low"
+      },
+      {
+        "name": "GFR Estimated",
+        "value": "132",
+        "unit": "mL/min/1.73m2",
+        "referenceRange": ">59",
+        "flag": "normal"
+      },
+      {
+        "name": "Urea",
+        "value": "21.77",
+        "unit": "mg/dL",
+        "referenceRange": "14.9 - 38.5",
+        "flag": "normal"
+      },
+      {
+        "name": "Urea Nitrogen Blood",
+        "value": "10.17",
+        "unit": "mg/dL",
+        "referenceRange": "6.00 - 20.00",
+        "flag": "normal"
+      },
+      {
+        "name": "BUN/Creatinine Ratio",
+        "value": "15",
+        "flag": "normal"
+      },
+      {
+        "name": "Uric Acid",
+        "value": "7.80",
+        "unit": "mg/dL",
+        "referenceRange": "3.50 - 7.20",
+        "flag": "high"
+      },
+      {
+        "name": "AST (SGOT)",
+        "value": "22.0",
+        "unit": "U/L",
+        "referenceRange": "<50",
+        "flag": "normal"
+      },
+      {
+        "name": "ALT (SGPT)",
+        "value": "23.4",
+        "unit": "U/L",
+        "referenceRange": "<50",
+        "flag": "normal"
+      },
+      {
+        "name": "AST:ALT Ratio",
+        "value": "0.94",
+        "referenceRange": "<1.00",
+        "flag": "normal"
+      },
+      {
+        "name": "GGTP",
+        "value": "23.1",
+        "unit": "U/L",
+        "referenceRange": "<55",
+        "flag": "normal"
+      },
+      {
+        "name": "Alkaline Phosphatase (ALP)",
+        "value": "90.60",
+        "unit": "U/L",
+        "referenceRange": "30 - 120",
+        "flag": "normal"
+      },
+      {
+        "name": "Bilirubin Total",
+        "value": "0.78",
+        "unit": "mg/dL",
+        "referenceRange": "0.30 - 1.20",
+        "flag": "normal"
+      },
+      {
+        "name": "Bilirubin Direct",
+        "value": "0.13",
+        "unit": "mg/dL",
+        "referenceRange": "<0.2",
+        "flag": "normal"
+      },
+      {
+        "name": "Bilirubin Indirect",
+        "value": "0.65",
+        "unit": "mg/dL",
+        "referenceRange": "<1.10",
+        "flag": "normal"
+      },
+      {
+        "name": "Total Protein",
+        "value": "7.79",
+        "unit": "g/dL",
+        "referenceRange": "6.40 - 8.30",
+        "flag": "normal"
+      },
+      {
+        "name": "Albumin",
+        "value": "4.22",
+        "unit": "g/dL",
+        "referenceRange": "3.50 - 5.20",
+        "flag": "normal"
+      },
+      {
+        "name": "Globulin",
+        "value": "3.57",
+        "unit": "gm/dL",
+        "referenceRange": "2.0 - 3.5",
+        "flag": "high"
+      },
+      {
+        "name": "A : G Ratio",
+        "value": "1.18",
+        "referenceRange": "0.90 - 2.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Calcium, Total",
+        "value": "9.43",
+        "unit": "mg/dL",
+        "referenceRange": "8.80 - 10.60",
+        "flag": "normal"
+      },
+      {
+        "name": "Phosphorus",
+        "value": "4.78",
+        "unit": "mg/dL",
+        "referenceRange": "2.40 - 4.40",
+        "flag": "high"
+      },
+      {
+        "name": "Sodium",
+        "value": "141.00",
+        "unit": "mEq/L",
+        "referenceRange": "136.00 - 146.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Potassium",
+        "value": "3.58",
+        "unit": "mEq/L",
+        "referenceRange": "3.50 - 5.10",
+        "flag": "normal"
+      },
+      {
+        "name": "Chloride",
+        "value": "103.00",
+        "unit": "mEq/L",
+        "referenceRange": "101.00 - 109.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Cholesterol, Total",
+        "value": "193.85",
+        "unit": "mg/dL",
+        "referenceRange": "<200.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Triglycerides",
+        "value": "138.04",
+        "unit": "mg/dL",
+        "referenceRange": "<150.00",
+        "flag": "normal"
+      },
+      {
+        "name": "HDL Cholesterol",
+        "value": "44.19",
+        "unit": "mg/dL",
+        "referenceRange": ">40.00",
+        "flag": "normal"
+      },
+      {
+        "name": "LDL Cholesterol, Calculated",
+        "value": "122.05",
+        "unit": "mg/dL",
+        "referenceRange": "<100.00",
+        "flag": "high"
+      },
+      {
+        "name": "VLDL Cholesterol,Calculated",
+        "value": "27.61",
+        "unit": "mg/dL",
+        "referenceRange": "<30.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Non-HDL Cholesterol",
+        "value": "150",
+        "unit": "mg/dL",
+        "referenceRange": "<130",
+        "flag": "high"
+      },
+      {
+        "name": "Glucose Fasting",
+        "value": "89.34",
+        "unit": "mg/dL",
+        "referenceRange": "70.00 - 100.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Vitamin B12",
+        "value": "<105",
+        "unit": "pg/mL",
+        "referenceRange": "222.00 - 1439.00",
+        "flag": "low"
+      },
+      {
+        "name": "Vitamin D, 25 Hydroxy",
+        "value": "10.96",
+        "unit": "nmol/L",
+        "referenceRange": "75.00 - 250.00",
+        "flag": "low"
+      },
+      {
+        "name": "T3, Total",
+        "value": "1.37",
+        "unit": "ng/mL",
+        "referenceRange": "0.70 - 2.04",
+        "flag": "normal"
+      },
+      {
+        "name": "T4, Total",
+        "value": "10.69",
+        "unit": "µg/dL",
+        "referenceRange": "4.82 - 15.65",
+        "flag": "normal"
+      },
+      {
+        "name": "TSH",
+        "value": "3.54",
+        "unit": "µIU/mL",
+        "referenceRange": "0.34 - 5.60",
+        "flag": "normal"
+      },
+      {
+        "name": "HbA1c",
+        "value": "5.9",
+        "unit": "%",
+        "referenceRange": "4.00 - 5.60",
+        "flag": "high"
+      },
+      {
+        "name": "Estimated average glucose (eAG)",
+        "value": "123",
+        "unit": "mg/dL",
+        "flag": "normal"
+      },
+      {
+        "name": "Hemoglobin",
+        "value": "15.16",
+        "unit": "g/dL",
+        "referenceRange": "13.00 - 17.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Packed Cell Volume (PCV)",
+        "value": "46.50",
+        "unit": "%",
+        "referenceRange": "40.00 - 50.00",
+        "flag": "normal"
+      },
+      {
+        "name": "RBC Count",
+        "value": "5.17",
+        "unit": "mill/mm3",
+        "referenceRange": "4.50 - 5.50",
+        "flag": "normal"
+      },
+      {
+        "name": "MCV",
+        "value": "90.00",
+        "unit": "fL",
+        "referenceRange": "83.00 - 101.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Mentzer Index",
+        "value": "17.4",
+        "flag": "normal"
+      },
+      {
+        "name": "MCH",
+        "value": "29.30",
+        "unit": "pg",
+        "referenceRange": "27.00 - 32.00",
+        "flag": "normal"
+      },
+      {
+        "name": "MCHC",
+        "value": "32.60",
+        "unit": "g/dL",
+        "referenceRange": "31.50 - 34.50",
+        "flag": "normal"
+      },
+      {
+        "name": "Red Cell Distribution Width (RDW)",
+        "value": "14.40",
+        "unit": "%",
+        "referenceRange": "11.60 - 14.00",
+        "flag": "high"
+      },
+      {
+        "name": "Total Leukocyte Count (TLC)",
+        "value": "8.02",
+        "unit": "thou/mm3",
+        "referenceRange": "4.00 - 10.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Segmented Neutrophils",
+        "value": "51.14",
+        "unit": "%",
+        "referenceRange": "40.00 - 80.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Lymphocytes",
+        "value": "37.14",
+        "unit": "%",
+        "referenceRange": "20.00 - 40.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Monocytes",
+        "value": "8.99",
+        "unit": "%",
+        "referenceRange": "2.00 - 10.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Eosinophils",
+        "value": "2.58",
+        "unit": "%",
+        "referenceRange": "1.00 - 6.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Basophils",
+        "value": "0.15",
+        "unit": "%",
+        "referenceRange": "<2.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Absolute Neutrophils",
+        "value": "4.10",
+        "unit": "thou/mm3",
+        "referenceRange": "2.00 - 7.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Absolute Lymphocytes",
+        "value": "2.98",
+        "unit": "thou/mm3",
+        "referenceRange": "1.00 - 3.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Absolute Monocytes",
+        "value": "0.72",
+        "unit": "thou/mm3",
+        "referenceRange": "0.20 - 1.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Absolute Eosinophils",
+        "value": "0.21",
+        "unit": "thou/mm3",
+        "referenceRange": "0.02 - 0.50",
+        "flag": "normal"
+      },
+      {
+        "name": "Absolute Basophils",
+        "value": "0.01",
+        "unit": "thou/mm3",
+        "referenceRange": "0.02 - 0.10",
+        "flag": "low"
+      },
+      {
+        "name": "Platelet Count",
+        "value": "285",
+        "unit": "thou/mm3",
+        "referenceRange": "150.00 - 410.00",
+        "flag": "normal"
+      },
+      {
+        "name": "Mean Platelet Volume",
+        "value": "8.9",
+        "unit": "fL",
+        "referenceRange": "6.5 - 12.0",
+        "flag": "normal"
+      },
+      {
+        "name": "Ferritin",
+        "value": "33.30",
+        "unit": "ng/mL",
+        "referenceRange": "23.9 - 336.2",
+        "flag": "normal"
+      }
+    ],
+    "medications": []
+  },
+  "Full-body-280926.pdf": {
+    "title": "Whole Body Checkup-2.0",
+    "recordType": "blood_test",
+    "date": "2026-09-28",
+    "doctorName": "Dr. Syeda Farheen Osman, MBBS., DCP",
+    "clinicOrLab": "Aarthi Scans & Labs",
+    "notes": "Patient underwent a Whole Body Checkup. Key abnormal findings include significantly elevated Rheumatoid Factor (RA Factor: 48.0 IU/mL), mildly elevated liver enzymes (ALT: 52.5 U/L, AST: 36.5 U/L), dyslipidemia (low HDL at 35.6 mg/dL, borderline high LDL at 133 mg/dL, elevated Triglycerides at 160.0 mg/dL, elevated VLDL at 32.0 mg/dL, and elevated Non-HDL at 148.4 mg/dL), elevated absolute lymphocytes (3250 cells/cumm), elevated MPV and PDW, and slightly low Transferrin Saturation (18.0%). Clinical correlation with autoimmune symptoms and liver function monitoring is recommended.",
+    "biomarkers": [
+      {
+        "name": "RBC (Red Blood Cell Count)",
+        "value": "5.16",
+        "unit": "Million/cmm",
+        "referenceRange": "4.5-5.5",
+        "flag": "normal"
+      },
+      {
+        "name": "Haemoglobin (HB)",
+        "value": "14.7",
+        "unit": "g/dl",
+        "referenceRange": "13.0-17.0",
+        "flag": "normal"
+      },
+      {
+        "name": "PCV (Haematocrit)",
+        "value": "44.8",
+        "unit": "%",
+        "referenceRange": "40-50",
+        "flag": "normal"
+      },
+      {
+        "name": "MCV",
+        "value": "86.9",
+        "unit": "fl",
+        "referenceRange": "83-101",
+        "flag": "normal"
+      },
+      {
+        "name": "MCH",
+        "value": "28.5",
+        "unit": "pg",
+        "referenceRange": "27-31",
+        "flag": "normal"
+      },
+      {
+        "name": "MCHC",
+        "value": "32.8",
+        "unit": "%",
+        "referenceRange": "31.5-34.5",
+        "flag": "normal"
+      },
+      {
+        "name": "Total WBC Count",
+        "value": "7670",
+        "unit": "cells/cumm",
+        "referenceRange": "4000-10000",
+        "flag": "normal"
+      },
+      {
+        "name": "Neutrophils",
+        "value": "48.30",
+        "unit": "%",
+        "referenceRange": "40-80",
+        "flag": "normal"
+      },
+      {
+        "name": "Lymphocytes",
+        "value": "42.50",
+        "unit": "%",
+        "referenceRange": "20-40",
+        "flag": "high"
+      },
+      {
+        "name": "Monocytes",
+        "value": "6.90",
+        "unit": "%",
+        "referenceRange": "2-8",
+        "flag": "normal"
+      },
+      {
+        "name": "Eosinophils",
+        "value": "2.10",
+        "unit": "%",
+        "referenceRange": "1-6",
+        "flag": "normal"
+      },
+      {
+        "name": "Basophils",
+        "value": "0.20",
+        "unit": "%",
+        "referenceRange": "0-1",
+        "flag": "normal"
+      },
+      {
+        "name": "Immature Granulocyte Percentage (IG%)",
+        "value": "0.2",
+        "unit": "%",
+        "referenceRange": "0 - 0.5",
+        "flag": "normal"
+      },
+      {
+        "name": "Platelet Count",
+        "value": "2.34",
+        "unit": "Lakhs/cumm",
+        "referenceRange": "1.5-4.5",
+        "flag": "normal"
+      },
+      {
+        "name": "ESR (1 Hour)",
+        "value": "7",
+        "unit": "mm/hr",
+        "referenceRange": "<10",
+        "flag": "normal"
+      },
+      {
+        "name": "Absolute Basophils Count",
+        "value": "20",
+        "unit": "cells/cumm",
+        "referenceRange": "20-100",
+        "flag": "normal"
+      },
+      {
+        "name": "Absolute Eosinophil Count",
+        "value": "160",
+        "unit": "cells/cumm",
+        "referenceRange": "20-500",
+        "flag": "normal"
+      },
+      {
+        "name": "Absolute Lymphocyte Count",
+        "value": "3250",
+        "unit": "cells/cumm",
+        "referenceRange": "1000-3000",
+        "flag": "high"
+      },
+      {
+        "name": "Absolute Monocytes Count",
+        "value": "530",
+        "unit": "cells/cumm",
+        "referenceRange": "200-1000",
+        "flag": "normal"
+      },
+      {
+        "name": "Absolute Neutrophil Count",
+        "value": "3710",
+        "unit": "cells/cumm",
+        "referenceRange": "2000-7000",
+        "flag": "normal"
+      },
+      {
+        "name": "RDW-CV",
+        "value": "14",
+        "unit": "%",
+        "referenceRange": "11.6-14.0",
+        "flag": "normal"
+      },
+      {
+        "name": "RDW-SD",
+        "value": "45",
+        "unit": "fl",
+        "referenceRange": "39-46",
+        "flag": "normal"
+      },
+      {
+        "name": "MPV (Mean Platelet Volume)",
+        "value": "13",
+        "unit": "fl",
+        "referenceRange": "6.5-12.0",
+        "flag": "high"
+      },
+      {
+        "name": "PDW (Platelet Distribution Width)",
+        "value": "16",
+        "unit": "%",
+        "referenceRange": "9-14",
+        "flag": "high"
+      },
+      {
+        "name": "PCT (Plateletcrit)",
+        "value": "0.31",
+        "unit": "%",
+        "referenceRange": "0.19-0.39",
+        "flag": "normal"
+      },
+      {
+        "name": "PLCR (Platelet to Large Cell Ratio)",
+        "value": "47",
+        "unit": "%",
+        "referenceRange": "19.7-42.4",
+        "flag": "high"
+      },
+      {
+        "name": "Glucose Fasting (FBS)",
+        "value": "95.1",
+        "unit": "mg/dL",
+        "referenceRange": "74-100",
+        "flag": "normal"
+      },
+      {
+        "name": "HbA1c",
+        "value": "5.2",
+        "unit": "%",
+        "referenceRange": "< 5.7",
+        "flag": "normal"
+      },
+      {
+        "name": "Mean Blood Glucose Level",
+        "value": "102.5",
+        "unit": "mg/dL",
+        "flag": "normal"
+      },
+      {
+        "name": "Amylase",
+        "value": "72.8",
+        "unit": "U/L",
+        "referenceRange": "28 - 100",
+        "flag": "normal"
+      },
+      {
+        "name": "Urea",
+        "value": "19.6",
+        "unit": "mg/dL",
+        "referenceRange": "17-51",
+        "flag": "normal"
+      },
+      {
+        "name": "Creatinine",
+        "value": "0.8",
+        "unit": "mg/dL",
+        "referenceRange": "0.5-1.3",
+        "flag": "normal"
+      },
+      {
+        "name": "Uric Acid",
+        "value": "7.2",
+        "unit": "mg/dL",
+        "referenceRange": "3.6-7.5",
+        "flag": "normal"
+      },
+      {
+        "name": "Blood Urea Nitrogen (BUN)",
+        "value": "9.2",
+        "unit": "mg/dL",
+        "referenceRange": "6.0-20.0",
+        "flag": "normal"
+      },
+      {
+        "name": "Urea/Creatinine Ratio",
+        "value": "25",
+        "unit": "%",
+        "referenceRange": "10 - 20",
+        "flag": "high"
+      },
+      {
+        "name": "BUN/Creatinine Ratio",
+        "value": "11.8",
+        "unit": "Ratio",
+        "referenceRange": "9-23",
+        "flag": "normal"
+      },
+      {
+        "name": "Calcium",
+        "value": "10.0",
+        "unit": "mg/dL",
+        "referenceRange": "8.4-10.4",
+        "flag": "normal"
+      },
+      {
+        "name": "Phosphorus",
+        "value": "4.3",
+        "unit": "mg/dL",
+        "referenceRange": "2.32-4.65",
+        "flag": "normal"
+      },
+      {
+        "name": "ASO (Antistreptolysin O)",
+        "value": "24.3",
+        "unit": "IU/ml",
+        "referenceRange": "<200",
+        "flag": "normal"
+      },
+      {
+        "name": "CRP (C-reactive protein)",
+        "value": "2.91",
+        "unit": "mg/L",
+        "referenceRange": "0 - 5",
+        "flag": "normal"
+      },
+      {
+        "name": "RA Factor (Rheumatoid Factor)",
+        "value": "48.0",
+        "unit": "IU/mL",
+        "referenceRange": "<14",
+        "flag": "high"
+      },
+      {
+        "name": "Sodium",
+        "value": "138.5",
+        "unit": "mmol/L",
+        "referenceRange": "135-145",
+        "flag": "normal"
+      },
+      {
+        "name": "Chloride",
+        "value": "102.0",
+        "unit": "mmol/L",
+        "referenceRange": "95.0 - 110",
+        "flag": "normal"
+      },
+      {
+        "name": "Cholesterol Total",
+        "value": "184.0",
+        "unit": "mg/dL",
+        "referenceRange": "<200",
+        "flag": "normal"
+      },
+      {
+        "name": "HDL Cholesterol",
+        "value": "35.6",
+        "unit": "mg/dL",
+        "referenceRange": "40-60",
+        "flag": "low"
+      },
+      {
+        "name": "LDL Cholesterol",
+        "value": "133",
+        "unit": "mg/dL",
+        "referenceRange": "<100",
+        "flag": "high"
+      },
+      {
+        "name": "Triglycerides",
+        "value": "160.0",
+        "unit": "mg/dL",
+        "referenceRange": "<150",
+        "flag": "high"
+      },
+      {
+        "name": "VLDL Cholesterol",
+        "value": "32.0",
+        "unit": "mg/dL",
+        "referenceRange": "<30",
+        "flag": "high"
+      },
+      {
+        "name": "Non-HDL Cholesterol",
+        "value": "148.4",
+        "unit": "mg/dL",
+        "referenceRange": "<130",
+        "flag": "high"
+      },
+      {
+        "name": "CHO / HDL Ratio",
+        "value": "5.2",
+        "unit": "Ratio",
+        "referenceRange": "<5.0",
+        "flag": "high"
+      },
+      {
+        "name": "LDL/HDL Ratio",
+        "value": "3.7",
+        "unit": "Ratio",
+        "referenceRange": "1.5-3.5",
+        "flag": "high"
+      },
+      {
+        "name": "TGL/HDL Ratio",
+        "value": "4.5",
+        "unit": "Ratio",
+        "referenceRange": "<2.0",
+        "flag": "high"
+      },
+      {
+        "name": "Creatine Phosphokinase (CPK)",
+        "value": "83.4",
+        "unit": "U/L",
+        "referenceRange": "46-171",
+        "flag": "normal"
+      },
+      {
+        "name": "Bilirubin Total",
+        "value": "0.50",
+        "unit": "mg/dL",
+        "referenceRange": "<1.2",
+        "flag": "normal"
+      },
+      {
+        "name": "Bilirubin Direct",
+        "value": "0.19",
+        "unit": "mg/dL",
+        "referenceRange": "0-0.3",
+        "flag": "normal"
+      },
+      {
+        "name": "Bilirubin Indirect",
+        "value": "0.30",
+        "unit": "mg/dL",
+        "referenceRange": "0.1 - 0.9",
+        "flag": "normal"
+      },
+      {
+        "name": "AST (SGOT)",
+        "value": "36.5",
+        "unit": "U/L",
+        "referenceRange": "5-35",
+        "flag": "high"
+      },
+      {
+        "name": "ALT (SGPT)",
+        "value": "52.5",
+        "unit": "U/L",
+        "referenceRange": "5-40",
+        "flag": "high"
+      },
+      {
+        "name": "Alkaline Phosphatase",
+        "value": "95.7",
+        "unit": "U/L",
+        "referenceRange": "53-128",
+        "flag": "normal"
+      },
+      {
+        "name": "Gamma GT",
+        "value": "23.1",
+        "unit": "U/L",
+        "referenceRange": "5-50",
+        "flag": "normal"
+      },
+      {
+        "name": "Total Protein",
+        "value": "7.52",
+        "unit": "g/dl",
+        "referenceRange": "6.0-8.0",
+        "flag": "normal"
+      },
+      {
+        "name": "Albumin",
+        "value": "4.63",
+        "unit": "g/dl",
+        "referenceRange": "3.5-5.2",
+        "flag": "normal"
+      },
+      {
+        "name": "Globulin",
+        "value": "2.89",
+        "unit": "g/dl",
+        "referenceRange": "2.8-3.5",
+        "flag": "normal"
+      },
+      {
+        "name": "A/G Ratio",
+        "value": "1.6",
+        "unit": "Ratio",
+        "referenceRange": "1.1-2.5",
+        "flag": "normal"
+      },
+      {
+        "name": "AST/ALT Ratio",
+        "value": "0.7",
+        "unit": "%",
+        "referenceRange": "1-1.19",
+        "flag": "low"
+      },
+      {
+        "name": "Lactate Dehydrogenase (LDH)",
+        "value": "190.0",
+        "unit": "IU/L",
+        "referenceRange": "125-246",
+        "flag": "normal"
+      },
+      {
+        "name": "Iron",
+        "value": "62.3",
+        "unit": "ug/dl",
+        "referenceRange": "50-175",
+        "flag": "normal"
+      },
+      {
+        "name": "Unsaturated Iron Binding Capacity (UIBC)",
+        "value": "284",
+        "unit": "µg/dl",
+        "referenceRange": "155-355",
+        "flag": "normal"
+      },
+      {
+        "name": "Total Iron Binding Capacity (TIBC)",
+        "value": "346.3",
+        "unit": "ug/dl",
+        "referenceRange": "251-406",
+        "flag": "normal"
+      },
+      {
+        "name": "Transferrin",
+        "value": "234.0",
+        "unit": "mg/dL",
+        "referenceRange": "170-380",
+        "flag": "normal"
+      },
+      {
+        "name": "Transferrin Saturation",
+        "value": "18.0",
+        "unit": "%",
+        "referenceRange": "20-50",
+        "flag": "low"
+      },
+      {
+        "name": "Apolipoprotein A1",
+        "value": "109.0",
+        "unit": "mg/dL",
+        "referenceRange": ">115",
+        "flag": "low"
+      },
+      {
+        "name": "Apolipoprotein B",
+        "value": "102.0",
+        "unit": "mg/dL",
+        "referenceRange": "<100",
+        "flag": "high"
+      },
+      {
+        "name": "Apolipoprotein B / A1 Ratio",
+        "value": "0.94",
+        "unit": "Ratio",
+        "referenceRange": "0.760 - 3.230",
+        "flag": "normal"
+      },
+      {
+        "name": "Urine pH",
+        "value": "5",
+        "referenceRange": "4.6 - 8.0",
+        "flag": "normal"
+      },
+      {
+        "name": "Urine Specific Gravity",
+        "value": "1.022",
+        "referenceRange": "1.005-1.030",
+        "flag": "normal"
+      },
+      {
+        "name": "Urine Pus Cells",
+        "value": "2-4",
+        "unit": "/hpf",
+        "referenceRange": "0-5/hpf",
+        "flag": "normal"
+      },
+      {
+        "name": "Urine Epithelial Cells",
+        "value": "1-2",
+        "unit": "/hpf",
+        "referenceRange": "0-5/hpf",
+        "flag": "normal"
+      },
+      {
+        "name": "Urine Mucus",
+        "value": "Present",
+        "referenceRange": "Absent",
+        "flag": "high"
+      },
+      {
+        "name": "Total-T3",
+        "value": "146.0",
+        "unit": "ng/dl",
+        "referenceRange": "70-204",
+        "flag": "normal"
+      },
+      {
+        "name": "Total-T4",
+        "value": "9.9",
+        "unit": "ug/dl",
+        "referenceRange": "4.5-11.7",
+        "flag": "normal"
+      },
+      {
+        "name": "TSH",
+        "value": "3.740",
+        "unit": "uIU/ml",
+        "referenceRange": "0.4-4.5",
+        "flag": "normal"
+      },
+      {
+        "name": "Vitamin D Total 25(OH)",
+        "value": "46.20",
+        "unit": "ng/ml",
+        "referenceRange": "30-100",
+        "flag": "normal"
+      },
+      {
+        "name": "Vitamin B12",
+        "value": "452.00",
+        "unit": "pg/ml",
+        "referenceRange": "120-911",
+        "flag": "normal"
+      },
+      {
+        "name": "Folic Acid",
+        "value": "5.84",
+        "unit": "ng/ml",
+        "referenceRange": "2.6-12.2",
+        "flag": "normal"
+      }
+    ],
+    "medications": []
+  },
+  "Full-body.pdf": {
+    "error": "Failed to parse AI response into structured medical data."
+  }
+}

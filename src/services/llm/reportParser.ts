@@ -79,11 +79,10 @@ export async function parseMedicalReport(input: ParseReportInput): Promise<Parse
 
   const candidateModels = Array.from(
     new Set([
-      config.gemini.model || 'gemini-3.8-flash',
+      config.gemini.model || 'gemini-3.5-flash',
+      'gemini-3.5-flash',
+      'gemini-3-flash-preview',
       'gemini-3.8-flash',
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-flash',
     ])
   );
 
@@ -108,23 +107,33 @@ export async function parseMedicalReport(input: ParseReportInput): Promise<Parse
   let lastErr: any = null;
 
   for (const candidate of candidateModels) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: candidate,
-        systemInstruction: SYSTEM_PROMPT,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-          maxOutputTokens: 16384,
-        },
-      });
-      const res = await model.generateContent(contents);
-      text = res.response.text();
-      if (text) break;
-    } catch (err: any) {
-      lastErr = err;
-      console.warn(`[reportParser] Model ${candidate} failed: ${err.message}. Trying next fallback...`);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: candidate,
+          systemInstruction: SYSTEM_PROMPT,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
+            maxOutputTokens: 16384,
+          },
+        });
+        const res = await model.generateContent(contents);
+        text = res.response.text();
+        if (text) break;
+      } catch (err: any) {
+        lastErr = err;
+        const isTransient = err.message?.includes('503') || err.message?.includes('429');
+        if (isTransient && attempt === 0) {
+          console.warn(`[reportParser] Transient error for ${candidate} (${err.message}). Retrying in 1.5s...`);
+          await new Promise((r) => setTimeout(r, 1500));
+          continue;
+        }
+        console.warn(`[reportParser] Model ${candidate} failed: ${err.message}. Trying next fallback...`);
+        break;
+      }
     }
+    if (text) break;
   }
 
   if (!text) {
@@ -133,26 +142,40 @@ export async function parseMedicalReport(input: ParseReportInput): Promise<Parse
 
   let parsed: any;
   try {
-    parsed = JSON.parse(text);
+    let cleanText = text.trim();
+    if (cleanText.startsWith('```json')) {
+      cleanText = cleanText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    }
+    parsed = JSON.parse(cleanText);
   } catch (err: any) {
     // Attempt robust recovery for truncated JSON
     try {
       let repaired = text.trim();
-      const quoteMatches = repaired.match(/"/g);
-      if (quoteMatches && quoteMatches.length % 2 !== 0) {
-        repaired += '"';
+      if (repaired.startsWith('```json')) {
+        repaired = repaired.replace(/^```json\s*/, '').replace(/\s*```$/, '');
       }
-      if (repaired.includes('"biomarkers"') && !repaired.includes(']')) {
-        repaired += '}]';
-      }
-      if (!repaired.endsWith('}')) {
-        repaired += '}';
+      // If JSON was cut off inside a biomarker item, cut back to the last complete object '}'
+      const lastCloseObj = repaired.lastIndexOf('}');
+      if (lastCloseObj !== -1) {
+        repaired = repaired.substring(0, lastCloseObj + 1);
+        if (!repaired.includes(']')) repaired += ']';
+        if (!repaired.endsWith('}')) repaired += '}';
+      } else {
+        const quoteMatches = repaired.match(/"/g);
+        if (quoteMatches && quoteMatches.length % 2 !== 0) repaired += '"';
+        if (repaired.includes('"biomarkers"') && !repaired.includes(']')) repaired += '}]';
+        if (!repaired.endsWith('}')) repaired += '}';
       }
       parsed = JSON.parse(repaired);
     } catch (salvageErr) {
       console.error('[reportParser] JSON parse error from Gemini response:', text, err);
       throw new Error('Failed to parse AI response into structured medical data.');
     }
+  }
+
+  // Handle case where LLM wraps the response in an array: [{ ... }]
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    parsed = parsed[0];
   }
 
   const biomarkersList = Array.isArray(parsed?.biomarkers)
