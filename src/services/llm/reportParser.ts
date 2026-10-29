@@ -43,11 +43,11 @@ const SYSTEM_PROMPT = `You are a clinical document analyst and medical laborator
 Your task is to accurately read and parse medical reports, blood test results, doctor prescriptions, radiology/imaging reports, or clinical visit notes.
 
 Extract the following structured information with clinical precision:
-1. "title": A concise, accurate clinical title (e.g. "Comprehensive Metabolic Panel (CMP)", "Lipid Panel", "Complete Blood Count (CBC)", "Rheumatology Consultation Note", "Methotrexate Prescription").
-2. "recordType": Exactly one of "blood_test", "doctor_prescription", "imaging", "doctor_note". Choose according to the document's primary content.
+1. "title": A concise, accurate clinical title (e.g. "SwasthFit Super 4 Health Package", "Comprehensive Metabolic Panel (CMP)", "Lipid Panel", "Complete Blood Count (CBC)").
+2. "recordType": Exactly one of "blood_test", "doctor_prescription", "imaging", "doctor_note". If any lab tests, blood tests, or biomarkers are present, ALWAYS choose "blood_test".
 3. "date": The report or collection date in YYYY-MM-DD format. If only month/day/year is found, format as YYYY-MM-DD. If none found, use today's date.
-4. "doctorName": Ordering doctor, physician, or provider name (e.g. "Dr. Sarah Chen, MD"). Leave empty or omit if not listed.
-5. "clinicOrLab": Name of the laboratory, hospital, clinic, or medical facility (e.g. "Quest Diagnostics", "Labcorp", "Mayo Clinic").
+4. "doctorName": Ordering doctor, referring physician ("Ref By"), or consulting pathologist (e.g. "Dr. Mattaparti Sridevi, MD"). If "Ref By" is "Self", look for the reporting pathologists/doctors.
+5. "clinicOrLab": Name of the laboratory, diagnostic centre, clinic, or hospital from header/logo/footer (e.g. "Dr Lal PathLabs", "Quest Diagnostics", "Labcorp").
 6. "notes": Comprehensive summary of clinical observations, doctor's impressions, diagnosis, abnormal findings, or recommendations.
 7. "biomarkers": Array of all quantitative or qualitative lab tests / analytes present in the report. Each item must have:
    - "name": Standard analyte name (e.g. "Hemoglobin", "WBC", "Platelets", "TSH", "ALT", "AST", "CRP", "Ferritin", "Vitamin D, 25-Hydroxy")
@@ -115,7 +115,7 @@ export async function parseMedicalReport(input: ParseReportInput): Promise<Parse
         generationConfig: {
           responseMimeType: 'application/json',
           temperature: 0.1,
-          maxOutputTokens: 2500,
+          maxOutputTokens: 16384,
         },
       });
       const res = await model.generateContent(contents);
@@ -131,42 +131,73 @@ export async function parseMedicalReport(input: ParseReportInput): Promise<Parse
     throw new Error(`AI report parsing failed: ${lastErr?.message || 'No response generated.'}`);
   }
 
+  let parsed: any;
   try {
-    const parsed = JSON.parse(text) as ParsedMedicalReport;
-
-    // Validate and clean up
-    return {
-      title: parsed.title || 'Medical Health Record',
-      recordType: ['blood_test', 'doctor_prescription', 'imaging', 'doctor_note'].includes(parsed.recordType)
-        ? parsed.recordType
-        : 'blood_test',
-      date: parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)
-        ? parsed.date
-        : new Date().toISOString().split('T')[0],
-      doctorName: parsed.doctorName || undefined,
-      clinicOrLab: parsed.clinicOrLab || undefined,
-      notes: parsed.notes || undefined,
-      biomarkers: Array.isArray(parsed.biomarkers)
-        ? parsed.biomarkers.map((b) => ({
-            name: String(b.name || '').trim(),
-            value: String(b.value || '').trim(),
-            unit: b.unit ? String(b.unit).trim() : undefined,
-            referenceRange: b.referenceRange ? String(b.referenceRange).trim() : undefined,
-            flag: ['normal', 'high', 'low', 'critical'].includes(b.flag as string) ? b.flag : 'normal',
-          })).filter((b) => b.name.length > 0)
-        : [],
-      medications: Array.isArray(parsed.medications)
-        ? parsed.medications.map((m) => ({
-            name: String(m.name || '').trim(),
-            dosage: m.dosage ? String(m.dosage).trim() : undefined,
-            frequency: m.frequency ? String(m.frequency).trim() : undefined,
-            instructions: m.instructions ? String(m.instructions).trim() : undefined,
-            refills: typeof m.refills === 'number' ? m.refills : undefined,
-          })).filter((m) => m.name.length > 0)
-        : [],
-    };
+    parsed = JSON.parse(text);
   } catch (err: any) {
-    console.error('[reportParser] JSON parse error from Gemini response:', text, err);
-    throw new Error('Failed to parse AI response into structured medical data.');
+    // Attempt robust recovery for truncated JSON
+    try {
+      let repaired = text.trim();
+      const quoteMatches = repaired.match(/"/g);
+      if (quoteMatches && quoteMatches.length % 2 !== 0) {
+        repaired += '"';
+      }
+      if (repaired.includes('"biomarkers"') && !repaired.includes(']')) {
+        repaired += '}]';
+      }
+      if (!repaired.endsWith('}')) {
+        repaired += '}';
+      }
+      parsed = JSON.parse(repaired);
+    } catch (salvageErr) {
+      console.error('[reportParser] JSON parse error from Gemini response:', text, err);
+      throw new Error('Failed to parse AI response into structured medical data.');
+    }
   }
+
+  const biomarkersList = Array.isArray(parsed?.biomarkers)
+    ? parsed.biomarkers
+        .map((b: any) => ({
+          name: String(b.name || '').trim(),
+          value: String(b.value || '').trim(),
+          unit: b.unit ? String(b.unit).trim() : undefined,
+          referenceRange: b.referenceRange ? String(b.referenceRange).trim() : undefined,
+          flag: ['normal', 'high', 'low', 'critical'].includes(b.flag as string) ? b.flag : 'normal',
+        }))
+        .filter((b: any) => b.name.length > 0)
+    : [];
+
+  const medicationsList = Array.isArray(parsed?.medications)
+    ? parsed.medications
+        .map((m: any) => ({
+          name: String(m.name || '').trim(),
+          dosage: m.dosage ? String(m.dosage).trim() : undefined,
+          frequency: m.frequency ? String(m.frequency).trim() : undefined,
+          instructions: m.instructions ? String(m.instructions) : undefined,
+          refills: typeof m.refills === 'number' ? m.refills : undefined,
+        }))
+        .filter((m: any) => m.name.length > 0)
+    : [];
+
+  const determinedType =
+    biomarkersList.length > 0
+      ? 'blood_test'
+      : ['blood_test', 'doctor_prescription', 'imaging', 'doctor_note'].includes(parsed?.recordType)
+      ? parsed.recordType
+      : medicationsList.length > 0
+      ? 'doctor_prescription'
+      : 'blood_test';
+
+  return {
+    title: parsed?.title || (biomarkersList.length > 0 ? 'Comprehensive Blood Test Panel' : 'Medical Health Record'),
+    recordType: determinedType,
+    date: parsed?.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)
+      ? parsed.date
+      : new Date().toISOString().split('T')[0],
+    doctorName: parsed?.doctorName || undefined,
+    clinicOrLab: parsed?.clinicOrLab || undefined,
+    notes: parsed?.notes || undefined,
+    biomarkers: biomarkersList,
+    medications: medicationsList,
+  };
 }
