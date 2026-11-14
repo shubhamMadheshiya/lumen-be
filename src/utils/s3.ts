@@ -43,6 +43,13 @@ export async function getDownloadUrl(
   return getSignedUrl(s3, command, { expiresIn });
 }
 
+/** Download an object's bytes on the server (used to show the member's own photos to Lumen AI). */
+export async function getObjectBytes(key: string): Promise<Buffer> {
+  const res = await s3.send(new GetObjectCommand({ Bucket: config.s3.bucket, Key: key }));
+  if (!res.Body) throw new Error(`Empty S3 object: ${key}`);
+  return Buffer.from(await res.Body.transformToByteArray());
+}
+
 /** Delete an object from the bucket. */
 export async function deleteObject(key: string): Promise<void> {
   await s3.send(new DeleteObjectCommand({ Bucket: config.s3.bucket, Key: key }));

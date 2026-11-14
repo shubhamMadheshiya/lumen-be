@@ -471,6 +471,42 @@ const MARK_LETTER: Record<SummaryModel['calendar'][number]['mark'], string> = {
  * written by anything but this function, and nothing here is checked against a clinical threshold.
  * Sections that would overflow the page skip the rest of their list rather than running onto page 2.
  */
+/** Plain text for PDF: drop markdown emphasis and turn "- " list markers into bullets. */
+export function plainForPdf(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/(^|\s)\*(\S[^*]*?)\*(?=\s|$)/g, '$1$2')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^\s*[-*]\s+/gm, '• ');
+}
+
+/**
+ * Lumen AI's weekly reviews for the report period, opt-in. Labelled as AI-written so a clinician
+ * never mistakes them for the record itself; text flows onto as many pages as it needs.
+ */
+export function renderAiReviewsPages(
+  doc: PDFKit.PDFDocument,
+  reviews: Array<{ weekStart: string; weekEnd: string; text: string }>,
+): void {
+  const left = 50;
+  const width = doc.page.width - 100;
+  doc.rect(left, 40, width, 4).fill('#6D28D9');
+  doc.y = 52;
+  doc.fontSize(15).font('Helvetica-Bold').fillColor('#0F172A').text('AI-WRITTEN WEEKLY REVIEWS', left, doc.y);
+  doc.moveDown(0.15);
+  doc.fontSize(8).font('Helvetica-Oblique').fillColor('#64748B').text(
+    'Written by Lumen AI (Google Gemini) from the patient\'s own logs, notes and photos. Interpretations are the AI\'s, not a clinician\'s, and may be wrong.',
+    left, doc.y, { width },
+  );
+  doc.moveDown(0.6);
+  for (const r of reviews) {
+    doc.fontSize(10.5).font('Helvetica-Bold').fillColor('#6D28D9').text(`Week of ${r.weekStart} to ${r.weekEnd}`, left, doc.y, { width });
+    doc.moveDown(0.2);
+    doc.fontSize(9).font('Helvetica').fillColor('#0F172A').text(plainForPdf(r.text), left, doc.y, { width, lineGap: 1.5 });
+    doc.moveDown(0.8);
+  }
+}
+
 export function renderSummaryPage(doc: PDFKit.PDFDocument, model: SummaryModel, patientName?: string): void {
   const textDark = '#0F172A';
   const textMuted = '#475569';

@@ -1,7 +1,16 @@
 import mongoose from 'mongoose';
 import { Task } from '../models/Task';
 import { TaskList } from '../models/TaskList';
-import { CreateTaskSchema, UpdateTaskSchema, CreateTaskListSchema } from '../shared/schemas';
+import { TaskListGroup } from '../models/TaskListGroup';
+import { TaskCategory } from '../models/TaskCategory';
+import {
+  CreateTaskSchema,
+  UpdateTaskSchema,
+  CreateTaskListSchema,
+  UpdateTaskListSchema,
+  CreateTaskListGroupSchema,
+  CreateTaskCategorySchema,
+} from '../shared/schemas';
 
 describe('Server Models & Schemas: Microsoft To Do Tasks', () => {
   it('validates a comprehensive CreateTaskSchema payload', () => {
@@ -95,5 +104,64 @@ describe('Server Models & Schemas: Microsoft To Do Tasks', () => {
 
     const parsed = CreateTaskListSchema.safeParse(validList);
     expect(parsed.success).toBe(true);
+  });
+
+  it('accepts a client generated 24-hex _id and rejects a temp id', () => {
+    const id = new mongoose.Types.ObjectId().toHexString();
+    expect(CreateTaskSchema.safeParse({ _id: id, title: 'x' }).success).toBe(true);
+    expect(CreateTaskSchema.safeParse({ _id: 'temp_123', title: 'x' }).success).toBe(false);
+    expect(CreateTaskSchema.safeParse({ title: 'x', listId: 'list_123' }).success).toBe(false);
+  });
+
+  it('lets UpdateTaskSchema clear fields with null', () => {
+    const parsed = UpdateTaskSchema.safeParse({
+      dueDate: null,
+      reminderTime: null,
+      repeat: null,
+      energyCost: null,
+      listId: null,
+      myDayDate: null,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.dueDate).toBeNull();
+      expect(parsed.data.repeat).toBeNull();
+    }
+  });
+
+  it('does not apply create defaults on a partial update', () => {
+    const parsed = UpdateTaskSchema.safeParse({ title: 'renamed' });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data).toEqual({ title: 'renamed' });
+    }
+  });
+
+  it('allows yearly repeat, categories and fractional sortOrder', () => {
+    const parsed = CreateTaskSchema.safeParse({
+      title: 'Renew prescription',
+      repeat: { frequency: 'yearly', interval: 1 },
+      categories: ['Doctor'],
+      sortOrder: 1.5,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('lets a list leave its group with groupId null', () => {
+    expect(UpdateTaskListSchema.safeParse({ groupId: null }).success).toBe(true);
+  });
+
+  it('validates group and category payloads and models', () => {
+    expect(CreateTaskListGroupSchema.safeParse({ name: 'Health admin' }).success).toBe(true);
+    expect(CreateTaskListGroupSchema.safeParse({ name: '' }).success).toBe(false);
+    expect(CreateTaskCategorySchema.safeParse({ name: 'Doctor', color: '#FF3B30' }).success).toBe(true);
+    expect(CreateTaskCategorySchema.safeParse({ name: 'Doctor', color: 'red' }).success).toBe(false);
+
+    const userId = new mongoose.Types.ObjectId();
+    expect(new TaskListGroup({ userId, name: 'Health admin' }).validateSync()).toBeUndefined();
+    expect(new TaskCategory({ userId, name: 'Doctor' }).validateSync()).toBeUndefined();
+    const task = new Task({ userId, title: 'x', categories: ['Doctor'], repeat: { frequency: 'yearly' } });
+    expect(task.validateSync()).toBeUndefined();
+    expect(task.categories).toEqual(['Doctor']);
   });
 });

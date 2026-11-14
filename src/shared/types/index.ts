@@ -469,6 +469,9 @@ export interface UserPreferences {
   theme: Theme;
   dayBoundaryHour: number; // hour at which a new "day" starts (e.g. 4 = 4am)
   aiExplanations?: boolean; // off by default; opt-in plain-language narration via Gemini (Phase 6)
+  aiFullAccess?: boolean; // Lumen AI may read all own data (set via POST /ai/access)
+  aiPhotoAccess?: boolean; // ...including photos, sensitive ones too
+  aiFreeTierAcknowledgedAt?: string;
 }
 
 export interface IUser {
@@ -588,7 +591,7 @@ export interface ITaskStep {
 }
 
 export interface ITaskRepeat {
-  frequency: 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'custom';
+  frequency: 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly' | 'custom';
   interval?: number;
   daysOfWeek?: number[];
 }
@@ -608,6 +611,8 @@ export interface ITask {
   repeat?: ITaskRepeat;
   energyCost?: TaskEnergyCost;
   listId?: string;
+  categories?: string[];
+  nextOccurrenceId?: string;
   steps: ITaskStep[];
   sortOrder: number;
   createdAt: string;
@@ -622,6 +627,26 @@ export interface ITaskList {
   color: string;
   sortOrder: number;
   isDefault?: boolean;
+  groupId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ITaskListGroup {
+  _id: string;
+  userId: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ITaskCategory {
+  _id: string;
+  userId: string;
+  name: string;
+  color: string;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 }

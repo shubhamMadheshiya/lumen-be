@@ -296,6 +296,8 @@ export const ReportRequestSchema = z.object({
   includeSummary: z.boolean().default(true),
   /** The member's own free-text questions for their doctor, printed on the summary page. */
   notesForDoctor: z.string().max(1000).optional(),
+  /** Lumen AI's weekly reviews for weeks in the period, labelled as AI-written. PDF format only. */
+  includeAiReviews: z.boolean().default(false),
 });
 
 // ────────── Reorder ──────────
@@ -367,12 +369,15 @@ export const TaskStepSchema = z.object({
 });
 
 export const TaskRepeatSchema = z.object({
-  frequency: z.enum(['daily', 'weekdays', 'weekly', 'monthly', 'custom']),
+  frequency: z.enum(['daily', 'weekdays', 'weekly', 'monthly', 'yearly', 'custom']),
   interval: z.number().int().positive().optional(),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
 });
 
+const ObjectIdString = z.string().regex(/^[0-9a-fA-F]{24}$/);
+
 export const CreateTaskSchema = z.object({
+  _id: ObjectIdString.optional(),
   title: z.string().min(1).max(300),
   notes: z.string().max(5000).optional(),
   isCompleted: z.boolean().optional().default(false),
@@ -383,21 +388,52 @@ export const CreateTaskSchema = z.object({
   reminderTime: z.string().optional(),
   repeat: TaskRepeatSchema.optional(),
   energyCost: z.enum(['gentle', 'moderate', 'demanding']).optional(),
-  listId: z.string().optional(),
+  listId: ObjectIdString.optional(),
+  categories: z.array(z.string().max(50)).max(20).optional().default([]),
+  nextOccurrenceId: ObjectIdString.optional(),
   steps: z.array(TaskStepSchema).optional().default([]),
-  sortOrder: z.number().int().optional().default(0),
+  sortOrder: z.number().optional().default(0),
 });
 
-export const UpdateTaskSchema = CreateTaskSchema.partial();
+// Fields that can be cleared send null; the server turns null into $unset.
+export const UpdateTaskSchema = CreateTaskSchema.omit({ _id: true }).partial().extend({
+  notes: z.string().max(5000).nullable().optional(),
+  myDayDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  reminderTime: z.string().nullable().optional(),
+  repeat: TaskRepeatSchema.nullable().optional(),
+  energyCost: z.enum(['gentle', 'moderate', 'demanding']).nullable().optional(),
+  listId: ObjectIdString.nullable().optional(),
+  nextOccurrenceId: ObjectIdString.nullable().optional(),
+});
 
 export const CreateTaskListSchema = z.object({
+  _id: ObjectIdString.optional(),
   name: z.string().min(1).max(100),
   icon: z.string().min(1).max(50).default('📋'),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#4A90E2'),
-  sortOrder: z.number().int().optional().default(0),
+  sortOrder: z.number().optional().default(0),
+  groupId: ObjectIdString.optional(),
 });
 
-export const UpdateTaskListSchema = CreateTaskListSchema.partial();
+export const UpdateTaskListSchema = CreateTaskListSchema.omit({ _id: true }).partial().extend({
+  groupId: ObjectIdString.nullable().optional(),
+});
+
+export const CreateTaskListGroupSchema = z.object({
+  _id: ObjectIdString.optional(),
+  name: z.string().min(1).max(100),
+  sortOrder: z.number().optional().default(0),
+});
+export const UpdateTaskListGroupSchema = CreateTaskListGroupSchema.omit({ _id: true }).partial();
+
+export const CreateTaskCategorySchema = z.object({
+  _id: ObjectIdString.optional(),
+  name: z.string().min(1).max(50),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#007AFF'),
+  sortOrder: z.number().optional().default(0),
+});
+export const UpdateTaskCategorySchema = CreateTaskCategorySchema.omit({ _id: true }).partial();
 
 export type CreateTaskDto = z.infer<typeof CreateTaskSchema>;
 export type UpdateTaskDto = z.infer<typeof UpdateTaskSchema>;

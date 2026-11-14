@@ -8,6 +8,7 @@ import { User } from '../models/User';
 import { LogEntry } from '../models/LogEntry';
 import { computeInsights } from '../services/insightService';
 import { DEFAULT_BOUNDARY_HOUR, resolveTimeZone } from '../utils/dayKey';
+import { runDueWeeklyReviews } from '../services/llm/assistant/weeklyReview';
 
 /** Hour of day (0-23) at `date` in `timeZone`. */
 export function localHour(date: Date, timeZone: string): number {
@@ -25,6 +26,10 @@ export function isDueNow(prefs: { timezone?: string; dayBoundaryHour?: number } 
 export function startInsightScheduler(): void {
   // Every hour at :30, so "04:30 local" is hit for whichever zone the member is in
   cron.schedule('30 * * * *', async () => {
+    // Lumen AI weekly review: Monday, in each member's boundary hour, only with AI full access on.
+    runDueWeeklyReviews(new Date(), prefs => isDueNow(prefs, new Date()))
+      .then(n => { if (n) console.log(`[scheduler] Wrote ${n} Lumen AI weekly review(s).`); })
+      .catch(err => console.error('[scheduler] weekly review error:', err));
     try {
       const now = new Date();
       const usersWithData = await LogEntry.distinct('userId');

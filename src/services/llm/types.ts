@@ -1,7 +1,8 @@
 /**
- * Shared types for the LLM narration layer (Phase 6).
+ * Shared types for the card-narration layer (Phase 6, the "Explain" button on Insights cards).
  *
- * The model never sees raw logs, notes or database ids. It only sees `InsightFact[]` — numbers
+ * In this layer the model never sees raw logs, notes or database ids (Lumen AI in ./assistant is
+ * the separate opt-in path with full access). It only sees `InsightFact[]` — numbers
  * and labels the engine already computed and verified — and must cite which facts back each
  * sentence it writes. `validateNarration` (./validators.ts) then checks the citations are honest
  * before the text is ever shown.
@@ -28,11 +29,5 @@ export interface NarrationSentence {
 }
 
 export interface NarrationResult {
-  sentences: NarrationSentence[];
-}
-
-/** Q&A's response shape: `answerable: false` means the given facts don't cover the question. */
-export interface AskResult {
-  answerable: boolean;
   sentences: NarrationSentence[];
 }

@@ -7,6 +7,7 @@ export interface ITaskListDoc extends Document {
   color: string;
   sortOrder: number;
   isDefault: boolean;
+  groupId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +20,7 @@ const TaskListSchema = new Schema<ITaskListDoc>(
     color: { type: String, default: '#4A90E2', maxlength: 20 },
     sortOrder: { type: Number, default: 0 },
     isDefault: { type: Boolean, default: false },
+    groupId: { type: Schema.Types.ObjectId, ref: 'TaskListGroup', index: true },
   },
   { timestamps: true }
 );

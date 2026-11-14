@@ -32,5 +32,3 @@ export function templateForWarning(state: WarningStateLike): string {
   const track = state.trackRecordOf ? ` In the past, this kind of alert was followed by a flare ${state.trackRecordFollowed} times out of ${state.trackRecordOf}.` : '';
   return `Today's pattern resembles the days that came before some of your past flares.${track} This is not a diagnosis or a prediction — just a reason to be a bit gentler with yourself today.`;
 }
-
-export const ASK_FALLBACK_TEXT = "I can only answer using the patterns Lumen has already found in your own logs, and right now I can't put together a confident answer to that. Try looking at the Insights tab, or rephrase your question around a specific pattern you've seen there.";

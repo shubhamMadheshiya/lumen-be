@@ -47,6 +47,12 @@ export const config = {
   gemini: {
     apiKey: optional('GEMINI_API_KEY'),
     model: optional('GEMINI_MODEL', 'gemini-3.1-flash-lite'),
+    /**
+     * Lumen AI chat / photo analysis / weekly review. Separate from GEMINI_MODEL on purpose: an answer
+     * takes 2-8 tool-calling turns, and "thinking" models (e.g. gemini-3.5-flash, 12-30 s per turn when
+     * measured on 2026-11-13) run out of time, while flash-lite answers in ~5-10 s.
+     */
+    assistantModel: optional('GEMINI_ASSISTANT_MODEL', 'gemini-3.1-flash-lite'),
   },
 
   isDev: optional('NODE_ENV', 'development') === 'development',

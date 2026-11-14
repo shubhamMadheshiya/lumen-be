@@ -22,6 +22,8 @@ export interface ITaskDoc extends Document {
   repeat?: ITaskRepeat;
   energyCost?: TaskEnergyCost;
   listId?: mongoose.Types.ObjectId;
+  categories: string[];
+  nextOccurrenceId?: mongoose.Types.ObjectId;
   steps: ITaskStepDoc[];
   sortOrder: number;
   createdAt: Date;
@@ -40,7 +42,7 @@ const TaskStepSchema = new Schema(
 
 const TaskRepeatSchema = new Schema(
   {
-    frequency: { type: String, enum: ['daily', 'weekdays', 'weekly', 'monthly', 'custom'], required: true },
+    frequency: { type: String, enum: ['daily', 'weekdays', 'weekly', 'monthly', 'yearly', 'custom'], required: true },
     interval: { type: Number, min: 1 },
     daysOfWeek: [{ type: Number, min: 0, max: 6 }],
   },
@@ -62,6 +64,8 @@ const TaskSchema = new Schema<ITaskDoc>(
     repeat: { type: TaskRepeatSchema },
     energyCost: { type: String, enum: ['gentle', 'moderate', 'demanding'] },
     listId: { type: Schema.Types.ObjectId, ref: 'TaskList', index: true },
+    categories: { type: [String], default: [] },
+    nextOccurrenceId: { type: Schema.Types.ObjectId },
     steps: { type: [TaskStepSchema], default: [] },
     sortOrder: { type: Number, default: 0 },
   },

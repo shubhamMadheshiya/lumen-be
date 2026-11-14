@@ -11,10 +11,12 @@ import { User } from '../models/User';
 import { Medication } from '../models/Medication';
 import { InsightFinding } from '../models/InsightFinding';
 import { FlareEpisode } from '../models/FlareEpisode';
+import { AiWeeklyReport } from '../models/AiWeeklyReport';
 import {
   buildPdfReport,
   buildCsvReport,
   renderSummaryPage,
+  renderAiReviewsPages,
   processLogEntries,
   aggregateQuickActions,
   computeClinicalHighlights,
@@ -33,7 +35,7 @@ reportsRouter.use(authenticate);
 reportsRouter.post('/', validate(ReportRequestSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = new mongoose.Types.ObjectId(req.userId!);
-    const { from, to, format, categoryIds, includeSummary, notesForDoctor } = req.body as z.infer<typeof ReportRequestSchema>;
+    const { from, to, format, categoryIds, includeSummary, notesForDoctor, includeAiReviews } = req.body as z.infer<typeof ReportRequestSchema>;
 
     const fromDate = new Date(from);
     let toDate = new Date(to);
@@ -108,6 +110,14 @@ reportsRouter.post('/', validate(ReportRequestSchema), async (req: AuthRequest, 
       const model = await buildReportSummaryModel(String(userId), fromClean, toClean, entries, notesForDoctor);
       renderSummaryPage(doc, model, user?.name);
       doc.addPage();
+    }
+    if (includeAiReviews) {
+      const reviews = await AiWeeklyReport.find({ userId, weekStart: { $lte: toClean }, weekEnd: { $gte: fromClean } })
+        .sort({ weekStart: 1 }).lean();
+      if (reviews.length > 0) {
+        renderAiReviewsPages(doc, reviews);
+        doc.addPage();
+      }
     }
     buildPdfReport(doc, context);
 

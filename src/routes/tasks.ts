@@ -4,11 +4,17 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { Task } from '../models/Task';
 import { TaskList } from '../models/TaskList';
+import { TaskListGroup } from '../models/TaskListGroup';
+import { TaskCategory } from '../models/TaskCategory';
 import {
   CreateTaskSchema,
   UpdateTaskSchema,
   CreateTaskListSchema,
   UpdateTaskListSchema,
+  CreateTaskListGroupSchema,
+  UpdateTaskListGroupSchema,
+  CreateTaskCategorySchema,
+  UpdateTaskCategorySchema,
 } from '../shared/schemas';
 
 export const tasksRouter = Router();
@@ -16,6 +22,38 @@ tasksRouter.use(authenticate);
 
 function uid(req: AuthRequest): mongoose.Types.ObjectId {
   return new mongoose.Types.ObjectId(req.userId!);
+}
+
+
+// Ids from old clients could be "temp_..." placeholders; answer 404 instead of a cast error.
+tasksRouter.param('id', (req, res, next, id) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(404).json({ success: false, message: 'Not found' });
+  }
+  next();
+});
+
+/** Splits a PATCH body into $set and $unset: null means "clear this field". */
+function splitNulls(body: Record<string, unknown>): { $set: Record<string, unknown>; $unset: Record<string, ''> } {
+  const $set: Record<string, unknown> = {};
+  const $unset: Record<string, ''> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (v === null) $unset[k] = '';
+    else if (v !== undefined) $set[k] = v;
+  }
+  return { $set, $unset };
+}
+
+function update(set: Record<string, unknown>, unset: Record<string, ''>): Record<string, unknown> {
+  const u: Record<string, unknown> = {};
+  if (Object.keys(set).length) u.$set = set;
+  if (Object.keys(unset).length) u.$unset = unset;
+  return u;
+}
+
+function dayBefore(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -37,6 +75,10 @@ tasksRouter.get('/lists', async (req: AuthRequest, res: Response, next: NextFunc
 tasksRouter.post('/lists', validate(CreateTaskListSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = uid(req);
+    if (req.body._id) {
+      const existing = await TaskList.findOne({ _id: req.body._id, userId });
+      if (existing) return res.status(200).json({ success: true, data: existing });
+    }
     const list = await TaskList.create({ ...req.body, userId });
     res.status(201).json({ success: true, data: list });
   } catch (err) {
@@ -48,9 +90,10 @@ tasksRouter.post('/lists', validate(CreateTaskListSchema), async (req: AuthReque
 tasksRouter.patch('/lists/:id', validate(UpdateTaskListSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = uid(req);
+    const { $set, $unset } = splitNulls(req.body);
     const list = await TaskList.findOneAndUpdate(
       { _id: req.params.id, userId },
-      { $set: req.body },
+      update($set, $unset),
       { new: true }
     );
     if (!list) {
@@ -73,6 +116,117 @@ tasksRouter.delete('/lists/:id', async (req: AuthRequest, res: Response, next: N
     // Dissociate tasks in this list rather than deleting them
     await Task.updateMany({ userId, listId: req.params.id }, { $unset: { listId: '' } });
     res.json({ success: true, message: 'Task list deleted' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// LIST GROUPS & CATEGORIES
+// ─────────────────────────────────────────────────────────────
+
+tasksRouter.get('/groups', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const groups = await TaskListGroup.find({ userId: uid(req) }).sort({ sortOrder: 1, createdAt: 1 });
+    res.json({ success: true, data: groups });
+  } catch (err) {
+    next(err);
+  }
+});
+
+tasksRouter.post('/groups', validate(CreateTaskListGroupSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    if (req.body._id) {
+      const existing = await TaskListGroup.findOne({ _id: req.body._id, userId });
+      if (existing) return res.status(200).json({ success: true, data: existing });
+    }
+    const group = await TaskListGroup.create({ ...req.body, userId });
+    res.status(201).json({ success: true, data: group });
+  } catch (err) {
+    next(err);
+  }
+});
+
+tasksRouter.patch('/groups/:id', validate(UpdateTaskListGroupSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const group = await TaskListGroup.findOneAndUpdate(
+      { _id: req.params.id, userId: uid(req) },
+      { $set: req.body },
+      { new: true }
+    );
+    if (!group) return res.status(404).json({ success: false, message: 'Group not found' });
+    res.json({ success: true, data: group });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Deleting a group ungroups its lists; the lists and their tasks stay.
+tasksRouter.delete('/groups/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    const group = await TaskListGroup.findOneAndDelete({ _id: req.params.id, userId });
+    if (!group) return res.status(404).json({ success: false, message: 'Group not found' });
+    await TaskList.updateMany({ userId, groupId: req.params.id }, { $unset: { groupId: '' } });
+    res.json({ success: true, message: 'Group deleted' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+tasksRouter.get('/categories', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const cats = await TaskCategory.find({ userId: uid(req) }).sort({ sortOrder: 1, createdAt: 1 });
+    res.json({ success: true, data: cats });
+  } catch (err) {
+    next(err);
+  }
+});
+
+tasksRouter.post('/categories', validate(CreateTaskCategorySchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    if (req.body._id) {
+      const existing = await TaskCategory.findOne({ _id: req.body._id, userId });
+      if (existing) return res.status(200).json({ success: true, data: existing });
+    }
+    const cat = await TaskCategory.create({ ...req.body, userId });
+    res.status(201).json({ success: true, data: cat });
+  } catch (err) {
+    next(err);
+  }
+});
+
+tasksRouter.patch('/categories/:id', validate(UpdateTaskCategorySchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    const cat = await TaskCategory.findOne({ _id: req.params.id, userId });
+    if (!cat) return res.status(404).json({ success: false, message: 'Category not found' });
+    const oldName = cat.name;
+    Object.assign(cat, req.body);
+    await cat.save();
+    // Tasks store the category name, so a rename has to follow through.
+    if (req.body.name && req.body.name !== oldName) {
+      await Task.updateMany(
+        { userId, categories: oldName },
+        { $set: { 'categories.$[c]': req.body.name } },
+        { arrayFilters: [{ c: oldName }] }
+      );
+    }
+    res.json({ success: true, data: cat });
+  } catch (err) {
+    next(err);
+  }
+});
+
+tasksRouter.delete('/categories/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = uid(req);
+    const cat = await TaskCategory.findOneAndDelete({ _id: req.params.id, userId });
+    if (!cat) return res.status(404).json({ success: false, message: 'Category not found' });
+    await Task.updateMany({ userId, categories: cat.name }, { $pull: { categories: cat.name } });
+    res.json({ success: true, message: 'Category deleted' });
   } catch (err) {
     next(err);
   }
@@ -119,6 +273,14 @@ tasksRouter.get('/suggestions', async (req: AuthRequest, res: Response, next: Ne
       dueDate: { $exists: false },
     }).sort({ createdAt: -1 }).limit(10);
 
+    // 5. Added to My Day yesterday and still open ("From yesterday")
+    const yesterday = await Task.find({
+      userId,
+      isCompleted: false,
+      inMyDay: false,
+      myDayDate: dayBefore(todayStr),
+    }).sort({ createdAt: -1 }).limit(10);
+
     res.json({
       success: true,
       data: {
@@ -126,6 +288,7 @@ tasksRouter.get('/suggestions', async (req: AuthRequest, res: Response, next: Ne
         dueToday,
         important,
         recent,
+        yesterday,
       },
     });
   } catch (err) {
@@ -196,6 +359,11 @@ tasksRouter.post('/', validate(CreateTaskSchema), async (req: AuthRequest, res: 
     const userId = uid(req);
     const body = req.body;
 
+    if (body._id) {
+      const existing = await Task.findOne({ _id: body._id, userId });
+      if (existing) return res.status(200).json({ success: true, data: existing });
+    }
+
     const task = await Task.create({
       ...body,
       userId,
@@ -229,19 +397,20 @@ tasksRouter.patch('/:id', validate(UpdateTaskSchema), async (req: AuthRequest, r
     const userId = uid(req);
     const body = req.body;
 
-    const updateFields: Record<string, unknown> = { ...body };
+    const { $set: updateFields, $unset } = splitNulls(body);
 
     if (body.isCompleted !== undefined) {
       if (body.isCompleted) {
         updateFields.completedAt = new Date();
       } else {
-        updateFields.completedAt = null;
+        delete updateFields.completedAt;
+        $unset.completedAt = '';
       }
     }
 
     const task = await Task.findOneAndUpdate(
       { _id: req.params.id, userId },
-      { $set: updateFields },
+      update(updateFields, $unset),
       { new: true }
     );
 

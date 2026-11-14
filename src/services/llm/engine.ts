@@ -1,12 +1,12 @@
 /**
- * Shared plumbing for both narration ("explain this card") and Q&A: check the cache, call
+ * Plumbing for card narration ("explain this card"): check the cache, call
  * Gemini, validate, retry once, fall back to the deterministic template. The template is never
  * a worse answer than a broken one — it's the thing that ships when nothing else can be trusted.
  */
 import crypto from 'crypto';
 import { config } from '../../config';
 import { Narration } from '../../models/Narration';
-import { generateAnswer, generateSentences, isGeminiConfigured } from './geminiClient';
+import { generateSentences, isGeminiConfigured } from './geminiClient';
 import { validateNarration } from './validators';
 import type { InsightFact } from './types';
 
@@ -54,27 +54,6 @@ export function narrate(opts: NarrateOptions): Promise<NarrateResult> {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const result = await generateSentences(opts.systemPrompt, opts.userPrompt);
       if (!result || result.sentences.length === 0) continue;
-      const check = validateNarration(result.sentences, opts.facts);
-      if (check.valid) return { text: result.sentences.map(s => s.text).join(' '), source: 'ai' };
-    }
-
-    return { text: opts.fallbackText, source: 'template' };
-  });
-}
-
-/**
- * Q&A variant: the model can honestly say it doesn't have enough to answer (`answerable: false`)
- * without being forced to fabricate a citation for that sentence — see geminiClient.ts for why.
- */
-export function narrateAsk(opts: NarrateOptions): Promise<NarrateResult> {
-  return withCache(opts, async () => {
-    if (!isGeminiConfigured()) return { text: opts.fallbackText, source: 'template' };
-
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const result = await generateAnswer(opts.systemPrompt, opts.userPrompt);
-      if (!result) continue;
-      if (!result.answerable) return { text: opts.fallbackText, source: 'template' };
-      if (result.sentences.length === 0) continue;
       const check = validateNarration(result.sentences, opts.facts);
       if (check.valid) return { text: result.sentences.map(s => s.text).join(' '), source: 'ai' };
     }

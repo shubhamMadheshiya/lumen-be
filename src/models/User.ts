@@ -19,6 +19,12 @@ export interface IUserDoc extends Document {
     dayBoundaryHour: number;
     /** Off by default: see services/llm. Sends only pattern counts and labels, never notes or raw logs. */
     aiExplanations: boolean;
+    /** Lumen AI chat/photo/weekly review may read all of the member's own data. Set only via POST /ai/access. */
+    aiFullAccess: boolean;
+    /** ...including photos, sensitive ones too. Needs the photo PIN to turn on when one is set. */
+    aiPhotoAccess: boolean;
+    /** When the member confirmed they read the Gemini free-tier data-use notice. */
+    aiFreeTierAcknowledgedAt?: Date;
   };
   consentAcceptedAt?: Date;
   configVersion: number;
@@ -45,6 +51,9 @@ const UserSchema = new Schema<IUserDoc>(
       theme:           { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
       dayBoundaryHour: { type: Number, default: 4, min: 0, max: 12 },
       aiExplanations:  { type: Boolean, default: false },
+      aiFullAccess:    { type: Boolean, default: false },
+      aiPhotoAccess:   { type: Boolean, default: false },
+      aiFreeTierAcknowledgedAt: { type: Date },
     },
     consentAcceptedAt: { type: Date },
     configVersion:     { type: Number, default: 1 },

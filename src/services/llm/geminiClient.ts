@@ -4,9 +4,12 @@
  * to guess at. Any failure (missing key, network, bad JSON) returns null — the caller always has
  * a deterministic template to fall back to (see ./templates.ts and ./engine.ts).
  */
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import {
+  GoogleGenerativeAI, SchemaType,
+  type Content, type FunctionCall, type FunctionDeclaration, type Part,
+} from '@google/generative-ai';
 import { config } from '../../config';
-import type { NarrationResult, AskResult } from './types';
+import type { NarrationResult } from './types';
 
 const SENTENCES_ITEMS = {
   type: SchemaType.OBJECT,
@@ -23,22 +26,6 @@ const RESPONSE_SCHEMA = {
     sentences: { type: SchemaType.ARRAY, items: SENTENCES_ITEMS },
   },
   required: ['sentences'],
-} as const;
-
-/**
- * Q&A gets its own schema with an explicit `answerable` flag. Without it, a model that honestly
- * writes "I don't have that in your logs" has no fact to cite for that sentence and fails
- * validateNarration's citation check — so an honest refusal and a hallucination looked identical
- * to the validator. `answerable: false` lets the engine use the fixed fallback text directly,
- * no citation needed, while a true answer still goes through the same citation/lexicon checks.
- */
-const ASK_RESPONSE_SCHEMA = {
-  type: SchemaType.OBJECT,
-  properties: {
-    answerable: { type: SchemaType.BOOLEAN },
-    sentences: { type: SchemaType.ARRAY, items: SENTENCES_ITEMS },
-  },
-  required: ['answerable', 'sentences'],
 } as const;
 
 let client: GoogleGenerativeAI | null = null;
@@ -84,26 +71,54 @@ export async function generateSentences(systemPrompt: string, userPrompt: string
   }
 }
 
-export async function generateAnswer(systemPrompt: string, userPrompt: string): Promise<AskResult | null> {
+// ── Lumen AI (assistant) ─────────────────────────────────────────────────────
+
+export type TurnResult =
+  | { ok: true; parts: Part[]; functionCalls: FunctionCall[]; text: string }
+  | { ok: false; error: 'not_configured' | 'rate_limited' | 'busy' | 'blocked' | 'timeout' | 'failed'; detail?: string };
+
+/**
+ * One model turn for the assistant: free text plus optional function calls. Unlike the narration
+ * calls above there is no JSON schema and no validator — the assistant is allowed to interpret.
+ */
+export async function generateTurn(opts: {
+  systemPrompt: string;
+  contents: Content[];
+  tools?: FunctionDeclaration[];
+  timeoutMs: number;
+  maxOutputTokens?: number;
+}): Promise<TurnResult> {
   const genAI = getClient();
-  if (!genAI) return null;
+  if (!genAI) return { ok: false, error: 'not_configured' };
   try {
     const model = genAI.getGenerativeModel({
-      model: config.gemini.model,
-      systemInstruction: systemPrompt,
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: ASK_RESPONSE_SCHEMA as never,
-        temperature: 0.2,
-        maxOutputTokens: 500,
-      },
-    }, { timeout: REQUEST_TIMEOUT_MS });
-    const result = await model.generateContent(userPrompt);
-    const raw = result.response.text();
-    const parsed = JSON.parse(raw) as AskResult;
-    if (typeof parsed.answerable !== 'boolean' || !Array.isArray(parsed.sentences)) return null;
-    return parsed;
-  } catch {
-    return null;
+      model: config.gemini.assistantModel,
+      systemInstruction: opts.systemPrompt,
+      ...(opts.tools?.length ? { tools: [{ functionDeclarations: opts.tools }] } : {}),
+      generationConfig: { temperature: 0.4, maxOutputTokens: opts.maxOutputTokens ?? 2048 },
+    }, { timeout: opts.timeoutMs });
+    const result = await model.generateContent({ contents: opts.contents });
+    const response = result.response;
+    const candidate = response.candidates?.[0];
+    if (!candidate || response.promptFeedback?.blockReason || candidate.finishReason === 'SAFETY') {
+      return { ok: false, error: 'blocked', detail: response.promptFeedback?.blockReason ?? candidate?.finishReason };
+    }
+    const parts = candidate.content?.parts ?? [];
+    const functionCalls = parts.filter(p => p.functionCall).map(p => p.functionCall as FunctionCall);
+    // Newer models can return their internal reasoning as parts marked `thought`; never show those.
+    const text = parts
+      .filter(p => !(p as Part & { thought?: boolean }).thought)
+      .map(p => p.text ?? '')
+      .join('')
+      .trim();
+    return { ok: true, parts, functionCalls, text };
+  } catch (err) {
+    const e = err as { status?: number; name?: string; message?: string };
+    if (e.status === 429) return { ok: false, error: 'rate_limited', detail: e.message };
+    // 503 'model is experiencing high demand' (seen live on the free tier) and 500s are Google-side and usually pass.
+    if (e.status === 503 || e.status === 500) return { ok: false, error: 'busy', detail: e.message };
+    if (e.name === 'AbortError' || /aborted|timeout/i.test(e.message ?? '')) return { ok: false, error: 'timeout' };
+    console.error('[gemini] assistant turn failed:', e.message);
+    return { ok: false, error: 'failed', detail: e.message };
   }
 }

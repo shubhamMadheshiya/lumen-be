@@ -1,4 +1,4 @@
-import { templateForFinding, templateForProgress, templateForWarning, ASK_FALLBACK_TEXT } from '../services/llm/templates';
+import { templateForFinding, templateForProgress, templateForWarning } from '../services/llm/templates';
 import { CAUSAL_LEXICON, MEDICATION_LEXICON, DIAGNOSIS_LEXICON } from '../services/llm/validators';
 import type { FindingDto, ProgressDto } from '../services/insightPresenter';
 import type { WarningStateLike } from '../services/llm/facts';
@@ -33,7 +33,6 @@ describe('template fallback copy-lint', () => {
     ...(['improving', 'worsening', 'steady', 'mixed', 'not_enough_data'] as const).map(progress).map(templateForProgress),
     templateForWarning(warning()),
     templateForWarning(warning({ alert: true, alertLevel: 1, trackRecordFollowed: 10, trackRecordOf: 23 })),
-    ASK_FALLBACK_TEXT,
   ];
 
   it.each(allTexts)('never uses causal, medication-change or diagnostic language: %s', text => {
