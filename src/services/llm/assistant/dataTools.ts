@@ -21,6 +21,7 @@ import { FlareEpisode } from '../../../models/FlareEpisode';
 import { Experiment } from '../../../models/Experiment';
 import { InsightFinding } from '../../../models/InsightFinding';
 import { Media } from '../../../models/Media';
+import { docToMarkdown } from '../../../shared/notes/docUtils';
 import { loadFlareDayKeys, loadPersistedDayRows } from '../../insights/dayTableService';
 import { classifyTrend, goodBadDays, regimeShifts, weeklyMedians } from '../../insights/progress';
 import { presentFindings, presentProgress } from '../../insightPresenter';
@@ -282,17 +283,41 @@ const handlers: Record<string, Handler> = {
 
   async get_notes(ctx, args) {
     const limit = num(args.limit, 20, 60);
-    const filter: Record<string, unknown> = { userId: oid(ctx.userId), isArchived: { $ne: true } };
+    const filter: Record<string, unknown> = {
+      userId: oid(ctx.userId),
+      isArchived: { $ne: true },
+      deletedAt: null,
+    };
     if (typeof args.from === 'string' || typeof args.to === 'string') {
       const { from, to } = range(ctx, args, 365);
       filter.updatedAt = widen(from, to);
     }
-    let notes = (await Note.find(filter).sort({ updatedAt: -1 }).limit(200).lean()).map(n => ({
-      title: n.title,
-      updated: n.updatedAt,
-      tags: n.tags,
-      text: flattenBlocks(n.blocks as INoteBlockDoc[]),
-    }));
+    const rawNotes = await Note.find(filter).sort({ updatedAt: -1 }).limit(200).lean();
+
+    const parentIds = Array.from(new Set(rawNotes.map(n => n.parentNoteId).filter(Boolean)));
+    const parents = parentIds.length > 0
+      ? await Note.find({ _id: { $in: parentIds }, userId: oid(ctx.userId) }).select('_id title').lean()
+      : [];
+    const parentMap = new Map<string, string>(parents.map(p => [String(p._id), p.title]));
+
+    let notes = rawNotes.map(n => {
+      const text = n.doc
+        ? docToMarkdown(n.doc)
+        : (n.plainText || flattenBlocks(n.blocks as INoteBlockDoc[]));
+
+      return {
+        id: String(n._id),
+        title: n.title,
+        updated: n.updatedAt,
+        tags: n.tags,
+        text,
+        parentTitle: n.parentNoteId ? parentMap.get(String(n.parentNoteId)) : undefined,
+        kind: n.kind || 'page',
+        rowProps: n.rowProps,
+        photoIds: n.mediaIds || [],
+      };
+    });
+
     if (typeof args.text === 'string' && args.text.trim()) {
       const t = args.text.trim().toLowerCase();
       notes = notes.filter(n => `${n.title}\n${n.text}`.toLowerCase().includes(t));

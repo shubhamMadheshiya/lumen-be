@@ -30,6 +30,15 @@ export function startInsightScheduler(): void {
     runDueWeeklyReviews(new Date(), prefs => isDueNow(prefs, new Date()))
       .then(n => { if (n) console.log(`[scheduler] Wrote ${n} Lumen AI weekly review(s).`); })
       .catch(err => console.error('[scheduler] weekly review error:', err));
+
+    // Notes Trash 30-day auto-purge
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { purgeExpiredTrash } = require('../routes/notes');
+      purgeExpiredTrash(30)
+        .then((purged: number) => { if (purged > 0) console.log(`[scheduler] Purged ${purged} expired trash note(s).`); })
+        .catch(() => {});
+    } catch {}
     try {
       const now = new Date();
       const usersWithData = await LogEntry.distinct('userId');

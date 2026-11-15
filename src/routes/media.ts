@@ -10,10 +10,21 @@ import { getUploadUrl, getDownloadUrl, deleteObject } from '../utils/s3';
 export const mediaRouter = Router();
 mediaRouter.use(authenticate);
 
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic',
-  'application/pdf',
-]);
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+};
+
+const ALLOWED_MIME_TYPES = new Set(Object.keys(MIME_TO_EXT));
 
 // POST /media/upload-url — get a pre-signed S3 PUT URL
 mediaRouter.post('/upload-url', async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -32,7 +43,7 @@ mediaRouter.post('/upload-url', async (req: AuthRequest, res: Response, next: Ne
       throw AppError.badRequest('File too large. Maximum size is 20 MB.');
     }
 
-    const ext = mimeType.split('/')[1].replace('jpeg', 'jpg');
+    const ext = MIME_TO_EXT[mimeType] || mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'bin';
     const key = `users/${req.userId!}/${uuidv4()}.${ext}`;
 
     const uploadUrl = await getUploadUrl(key, mimeType, 300); // 5-minute window

@@ -471,12 +471,62 @@ export const NoteBlockSchema: z.ZodType<any> = z.lazy(() =>
   })
 );
 
+export const DatabasePropertyTypeEnum = z.enum([
+  'text',
+  'number',
+  'date',
+  'select',
+  'multi_select',
+  'checkbox',
+  'url',
+]);
+
+export const DatabasePropertyOptionSchema = z.object({
+  id: z.string(),
+  name: z.string().max(100),
+  color: z.string().optional(),
+});
+
+export const DatabasePropertySchema = z.object({
+  id: z.string(),
+  name: z.string().max(100),
+  type: DatabasePropertyTypeEnum,
+  options: z.array(DatabasePropertyOptionSchema).optional(),
+});
+
+export const DatabaseViewTypeEnum = z.enum(['table', 'board']);
+
+export const DatabaseViewSchema = z.object({
+  id: z.string(),
+  name: z.string().max(100),
+  type: DatabaseViewTypeEnum,
+  sortPropId: z.string().optional(),
+  sortDirection: z.enum(['asc', 'desc']).optional(),
+  filterPropId: z.string().optional(),
+  filterValue: z.union([z.string(), z.boolean(), z.number()]).optional(),
+  groupByPropId: z.string().optional(),
+});
+
+export const DatabaseConfigSchema = z.object({
+  properties: z.array(DatabasePropertySchema),
+  views: z.array(DatabaseViewSchema),
+});
+
 export const CreateNoteSchema = z.object({
+  _id: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
   title: z.string().max(300).default('Untitled Note'),
   icon: z.string().max(30).optional(),
   coverGradient: z.string().max(200).optional(),
-  blocks: z.array(NoteBlockSchema).default([]),
-  parentNoteId: z.string().optional(),
+  coverMediaId: z.string().optional(),
+  doc: z.record(z.unknown()).optional(),
+  plainText: z.string().optional(),
+  kind: z.enum(['page', 'database']).default('page'),
+  sortOrder: z.number().default(0),
+  isFavorite: z.boolean().default(false),
+  database: DatabaseConfigSchema.optional(),
+  rowProps: z.record(z.unknown()).optional(),
+  blocks: z.array(NoteBlockSchema).optional().default([]),
+  parentNoteId: z.string().nullable().optional(),
   isPinned: z.boolean().default(false),
   isArchived: z.boolean().default(false),
   tags: z.array(z.string().min(1).max(50)).default([]),
@@ -485,10 +535,19 @@ export const CreateNoteSchema = z.object({
   linkedLogEntryIds: z.array(z.string()).optional(),
 });
 
-export const UpdateNoteSchema = CreateNoteSchema.partial();
+export const UpdateNoteSchema = CreateNoteSchema.partial().extend({
+  deletedAt: z.string().nullable().optional(),
+  trashRootId: z.string().nullable().optional(),
+});
+
+export const MoveNoteSchema = z.object({
+  parentNoteId: z.string().nullable().optional(),
+  sortOrder: z.number().optional(),
+});
 
 export type CreateNoteDto = z.infer<typeof CreateNoteSchema>;
 export type UpdateNoteDto = z.infer<typeof UpdateNoteSchema>;
+export type MoveNoteDto = z.infer<typeof MoveNoteSchema>;
 
 // ────────── Community Chat & Health Artifact Exchange ──────────
 

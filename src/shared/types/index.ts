@@ -679,12 +679,67 @@ export interface INoteBlock {
   imageUrl?: string;
 }
 
+export type DatabasePropertyType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'select'
+  | 'multi_select'
+  | 'checkbox'
+  | 'url';
+
+export interface IDatabasePropertyOption {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+export interface IDatabaseProperty {
+  id: string;
+  name: string;
+  type: DatabasePropertyType;
+  options?: IDatabasePropertyOption[];
+}
+
+export type DatabaseViewType = 'table' | 'board';
+
+export interface IDatabaseView {
+  id: string;
+  name: string;
+  type: DatabaseViewType;
+  sortPropId?: string;
+  sortDirection?: 'asc' | 'desc';
+  filterPropId?: string;
+  filterValue?: string | boolean | number;
+  groupByPropId?: string;
+  sort?: { propId: string; direction: 'asc' | 'desc' };
+  filter?: { propId: string; operator: 'equals' | 'contains' | 'is_checked'; value: any };
+  groupBy?: string;
+}
+
+export interface IDatabaseConfig {
+  properties: IDatabaseProperty[];
+  views: IDatabaseView[];
+}
+
 export interface INote {
   _id: string;
   userId: string;
   title: string;
   icon?: string;
   coverGradient?: string;
+  coverMediaId?: string;
+  doc?: Record<string, unknown>;
+  plainText?: string;
+  kind?: 'page' | 'database';
+  sortOrder?: number;
+  isFavorite?: boolean;
+  deletedAt?: string | null;
+  trashRootId?: string | null;
+  linkedNoteIds?: string[];
+  mediaIds?: string[];
+  database?: IDatabaseConfig;
+  rowProps?: Record<string, unknown>;
   blocks: INoteBlock[];
   parentNoteId?: string;
   isPinned: boolean;
@@ -695,6 +750,24 @@ export interface INote {
   linkedLogEntryIds?: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface INoteTreeNode {
+  _id: string;
+  title: string;
+  icon?: string;
+  parentNoteId?: string;
+  sortOrder: number;
+  kind: 'page' | 'database';
+  isFavorite: boolean;
+  isPinned: boolean;
+  updatedAt: string;
+}
+
+export interface INoteBreadcrumb {
+  _id: string;
+  title: string;
+  icon?: string;
 }
 
 // ────────── Community Chat & Health Artifact Exchange ──────────
