@@ -3,6 +3,7 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { AppError } from '../utils/errors';
 import { DaySession } from '../models/DaySession';
+import { LogEntry } from '../models/LogEntry';
 import { WakeUpSchema, GoToSleepSchema, UpdateDaySessionSchema } from '../shared';
 import mongoose from 'mongoose';
 
@@ -36,6 +37,48 @@ daySessionsRouter.post('/wake', validate(WakeUpSchema), async (req: AuthRequest,
       },
       { upsert: true, new: true },
     );
+
+    // Automatically create/upsert a sleep record in Timeline
+    try {
+      const bedtimeMs = session.sleepTime ? new Date(session.sleepTime).getTime() : wakeTime.getTime() - 8 * 3600000;
+      const durationMinutes = Math.max(15, Math.round((wakeTime.getTime() - bedtimeMs) / 60000));
+      const hours = Math.floor(durationMinutes / 60);
+      const mins = durationMinutes % 60;
+      const clientId = `sleep:${userId.toString()}:${sessionDate}`;
+      const bedtimeStr = session.sleepTime ? new Date(session.sleepTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+      const wakeStr = wakeTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const note = bedtimeStr
+        ? `Sleep: ${hours}h ${mins}m (${bedtimeStr} – ${wakeStr})`
+        : `Sleep: ${hours}h ${mins}m (woke at ${wakeStr})`;
+
+      await LogEntry.findOneAndUpdate(
+        { userId, clientId },
+        {
+          $set: {
+            source: 'sleep',
+            occurredAt: wakeTime,
+            loggedAt: new Date(),
+            timezone: 'UTC',
+            note,
+            answers: [
+              {
+                optionId: 'sleep_summary',
+                optionLabelSnapshot: `${hours}h ${mins}m sleep`,
+                values: [
+                  { fieldKey: 'sleep_duration_minutes', dataType: 'number', value: durationMinutes, unit: 'minutes' },
+                  ...(session.sleepTime ? [{ fieldKey: 'bedtime', dataType: 'string', value: new Date(session.sleepTime).toISOString() }] : []),
+                  { fieldKey: 'wake_time', dataType: 'string', value: wakeTime.toISOString() },
+                ],
+              },
+            ],
+          },
+          $setOnInsert: { userId, clientId, daySessionId: session._id },
+        },
+        { upsert: true }
+      );
+    } catch (err) {
+      // Non-blocking if timeline log upsert fails
+    }
 
     res.status(201).json({ success: true, data: session });
   } catch (err) { next(err); }

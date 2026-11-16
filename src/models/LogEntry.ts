@@ -31,7 +31,7 @@ export interface ILogEntryDoc extends Document {
   userId: mongoose.Types.ObjectId;
   clientId: string;                // UUID from the device — used for dedup on sync
   daySessionId?: mongoose.Types.ObjectId;
-  source: 'quick_action' | 'questionnaire' | 'check_in' | 'reminder' | 'activity' | 'quick_log';
+  source: 'quick_action' | 'questionnaire' | 'check_in' | 'reminder' | 'activity' | 'quick_log' | 'sleep' | 'sleep_quality_checkin';
   categoryId?: mongoose.Types.ObjectId;
   questionId?: mongoose.Types.ObjectId;
   questionVersion?: number;
@@ -70,7 +70,7 @@ const LogEntrySchema = new Schema<ILogEntryDoc>(
     userId:          { type: Schema.Types.ObjectId, ref: 'User', required: true },
     clientId:        { type: String, required: true },
     daySessionId:    { type: Schema.Types.ObjectId, ref: 'DaySession' },
-    source:          { type: String, enum: ['quick_action', 'questionnaire', 'check_in', 'reminder', 'activity', 'quick_log'], required: true },
+    source:          { type: String, enum: ['quick_action', 'questionnaire', 'check_in', 'reminder', 'activity', 'quick_log', 'sleep', 'sleep_quality_checkin'], required: true },
     categoryId:      { type: Schema.Types.ObjectId, ref: 'Category' },
     questionId:      { type: Schema.Types.ObjectId, ref: 'Question' },
     questionVersion: { type: Number },

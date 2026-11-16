@@ -120,6 +120,9 @@ export async function saveAutoWalks(userId: mongoose.Types.ObjectId, walks: Clea
     if (manual.some(m => overlaps(w, m.startTime, m.endTime))) continue;
     const seconds = Math.round((w.endTime.getTime() - w.startTime.getTime()) / 1000);
     const hours = seconds / 3600;
+    const distMeters = (w.distanceMeters && w.distanceMeters > 0)
+      ? w.distanceMeters
+      : Math.round(w.steps * 0.7);
     try {
       const session = await ActivitySession.create({
         userId,
@@ -132,10 +135,10 @@ export async function saveAutoWalks(userId: mongoose.Types.ObjectId, walks: Clea
         endTime: w.endTime,
         totalDurationSeconds: seconds,
         activeDurationSeconds: seconds,
-        distanceMeters: w.distanceMeters,
+        distanceMeters: distMeters,
         steps: w.steps,
-        averageSpeedKmh: hours > 0 ? Number((w.distanceMeters / 1000 / hours).toFixed(2)) : 0,
-        averagePaceMinPerKm: w.distanceMeters > 0 ? Number(((seconds / 60) / (w.distanceMeters / 1000)).toFixed(2)) : 0,
+        averageSpeedKmh: hours > 0 && distMeters > 0 ? Number((distMeters / 1000 / hours).toFixed(2)) : 0,
+        averagePaceMinPerKm: distMeters > 0 ? Number(((seconds / 60) / (distMeters / 1000)).toFixed(2)) : 0,
         hasRouteData: false,
       });
       const log = await LogEntry.create({
@@ -170,5 +173,48 @@ export async function saveDailySteps(userId: mongoose.Types.ObjectId, days: Dail
       upsert: true,
     },
   })));
+
+  // Upsert a daily walking summary log entry in Timeline for each day with steps
+  for (const d of days) {
+    if (d.steps > 0) {
+      const distMeters = Math.round(d.steps * 0.7);
+      const km = (distMeters / 1000).toFixed(2);
+      const mins = Math.round(d.steps / 100);
+      const clientId = `daily-activity:${userId.toString()}:${d.date}`;
+      const note = `Daily Activity: ${d.steps.toLocaleString('en-US')} steps · ${km} km · ${mins} min`;
+      const occurredAt = new Date(`${d.date}T20:00:00.000Z`);
+
+      try {
+        await LogEntry.findOneAndUpdate(
+          { userId, clientId },
+          {
+            $set: {
+              source: 'activity',
+              occurredAt,
+              loggedAt: new Date(),
+              timezone: 'UTC',
+              note,
+              answers: [
+                {
+                  optionId: 'daily_steps',
+                  optionLabelSnapshot: `${d.steps.toLocaleString('en-US')} steps`,
+                  values: [
+                    { fieldKey: 'steps', dataType: 'number', value: d.steps, unit: 'steps' },
+                    { fieldKey: 'distance_km', dataType: 'number', value: Number(km), unit: 'km' },
+                    { fieldKey: 'active_minutes', dataType: 'number', value: mins, unit: 'min' },
+                  ],
+                },
+              ],
+            },
+            $setOnInsert: { userId, clientId },
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        // Non-blocking if timeline log upsert fails
+      }
+    }
+  }
+
   return (res.upsertedCount ?? 0) + (res.modifiedCount ?? 0);
 }

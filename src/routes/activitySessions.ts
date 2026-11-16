@@ -169,6 +169,15 @@ activitySessionsRouter.post('/:id/stop', async (req: AuthRequest, res: Response,
     } = req.body;
 
     const end = endTime ? new Date(endTime) : new Date();
+    const finalSteps = steps || 0;
+    let finalDistMeters = distanceMeters || 0;
+    if (finalDistMeters === 0 && finalSteps > 0) {
+      finalDistMeters = Math.round(finalSteps * 0.7);
+    }
+    const distKm = finalDistMeters / 1000;
+    const activeSecs = activeDurationSeconds || totalDurationSeconds || 0;
+    const finalSpeed = averageSpeedKmh ?? ((activeSecs > 0 && distKm > 0) ? Number((distKm / (activeSecs / 3600)).toFixed(2)) : 0);
+    const finalPace = averagePaceMinPerKm ?? ((distKm > 0 && activeSecs > 0) ? Number(((activeSecs / 60) / distKm).toFixed(2)) : 0);
 
     const session = await ActivitySession.findOneAndUpdate(
       { _id: req.params.id, userId },
@@ -178,10 +187,10 @@ activitySessionsRouter.post('/:id/stop', async (req: AuthRequest, res: Response,
           endTime: end,
           totalDurationSeconds: totalDurationSeconds || 0,
           activeDurationSeconds: activeDurationSeconds || 0,
-          distanceMeters: distanceMeters || 0,
-          steps: steps || 0,
-          averageSpeedKmh,
-          averagePaceMinPerKm,
+          distanceMeters: finalDistMeters,
+          steps: finalSteps,
+          averageSpeedKmh: finalSpeed,
+          averagePaceMinPerKm: finalPace,
           startLatitude,
           startLongitude,
           endLatitude,
@@ -277,7 +286,12 @@ activitySessionsRouter.get('/walking/summary', async (req: AuthRequest, res: Res
       startTime: { $gte: startDate },
     });
 
-    const totalDistanceMeters = sessions.reduce((acc, s) => acc + (s.distanceMeters || 0), 0);
+    const totalDistanceMeters = sessions.reduce((acc, s) => {
+      const d = (s.distanceMeters && s.distanceMeters > 0)
+        ? s.distanceMeters
+        : (s.steps ? Math.round(s.steps * 0.7) : 0);
+      return acc + d;
+    }, 0);
     const totalDurationSeconds = sessions.reduce((acc, s) => acc + (s.activeDurationSeconds || 0), 0);
     const totalSteps = sessions.reduce((acc, s) => acc + (s.steps || 0), 0);
     const count = sessions.length;

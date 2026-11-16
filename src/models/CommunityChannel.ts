@@ -9,7 +9,8 @@ export interface ICommunityChannelDoc extends Document {
   color: string;
   topic: string;
   category: string;
-  type: 'text' | 'forum' | 'announcement';
+  type: 'text' | 'forum' | 'announcement' | 'dm';
+  dmMemberIds?: mongoose.Types.ObjectId[];
   order: number;
   memberCount: number;
   messageCount: number;
@@ -28,7 +29,8 @@ const CommunityChannelSchema = new Schema<ICommunityChannelDoc>(
     color: { type: String, default: '#38BDF8', maxlength: 20 },
     topic: { type: String, maxlength: 200, default: '' },
     category: { type: String, default: 'CONDITION HUBS', index: true },
-    type: { type: String, enum: ['text', 'forum', 'announcement'], default: 'text' },
+    type: { type: String, enum: ['text', 'forum', 'announcement', 'dm'], default: 'text' },
+    dmMemberIds: [{ type: Schema.Types.ObjectId, ref: 'User', index: true }],
     order: { type: Number, default: 0 },
     memberCount: { type: Number, default: 0 },
     messageCount: { type: Number, default: 0 },

@@ -36,7 +36,14 @@ export type CaptureTime = 'none' | 'auto_now' | 'user_picks';
 export type QuickActionMode = 'counter' | 'timer' | 'toggle';
 export type CategoryRole = 'trigger_candidate' | 'symptom' | 'context';
 export type QuestionFrequency = 'anytime' | 'once_per_day' | 'morning' | 'evening';
-export type LogSource = 'quick_action' | 'questionnaire' | 'check_in' | 'reminder' | 'activity';
+export type LogSource =
+  | 'quick_action'
+  | 'questionnaire'
+  | 'check_in'
+  | 'reminder'
+  | 'activity'
+  | 'sleep'
+  | 'sleep_quality_checkin';
 export type ReminderType = 'time' | 'inactivity';
 
 // ────────── FieldDefinition ──────────
@@ -815,6 +822,17 @@ export interface ICommunityMessage {
   senderAvatarEmoji?: string;
   isAnonymous: boolean;
   content: string;
+  isEdited?: boolean;
+  editedAt?: string;
+  isPinned?: boolean;
+  pinnedAt?: string;
+  pinnedBy?: {
+    userId: string;
+    displayName: string;
+  };
+  mentions?: string[];
+  audioUrl?: string;
+  audioDurationSeconds?: number;
   senderRoleColor?: string;
   senderRoleBadges?: string[];
   replyTo?: {
@@ -841,7 +859,7 @@ export interface ICommunityMessage {
   updatedAt: string;
 }
 
-export type ChannelType = 'text' | 'forum' | 'announcement';
+export type ChannelType = 'text' | 'forum' | 'announcement' | 'dm';
 
 export interface ICommunityServer {
   _id: string;
@@ -872,11 +890,18 @@ export interface ICommunityChannel {
   topic: string;
   category: string;
   type: ChannelType;
+  dmMemberIds?: string[];
+  dmUser?: {
+    _id: string;
+    displayName: string;
+    avatarEmoji?: string;
+  };
   order: number;
   memberCount: number;
   messageCount: number;
   isFeatured: boolean;
   unreadCount?: number;
+  lastReadMessageId?: string;
   createdAt: string;
 }
 

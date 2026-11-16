@@ -590,6 +590,9 @@ export const CreateCommunityMessageSchema = z.object({
   senderAvatarEmoji: z.string().max(30).optional(),
   senderRoleColor: z.string().optional(),
   senderRoleBadges: z.array(z.string()).optional(),
+  mentions: z.array(z.string()).optional(),
+  audioUrl: z.string().optional(),
+  audioDurationSeconds: z.number().optional(),
   replyTo: z.object({
     messageId: z.string(),
     senderDisplayName: z.string(),
@@ -603,6 +606,28 @@ export const CreateCommunityMessageSchema = z.object({
     photoUrl: z.string().optional(),
     caption: z.string().max(500).optional(),
   }).optional(),
+});
+
+export const EditCommunityMessageSchema = z.object({
+  content: z.string().min(1).max(3000),
+});
+
+export const PinCommunityMessageSchema = z.object({
+  isPinned: z.boolean().optional(),
+});
+
+export const MarkChannelReadSchema = z.object({
+  lastReadMessageId: z.string().optional(),
+});
+
+export const CreateDmChannelSchema = z.object({
+  targetUserId: z.string().min(1),
+});
+
+export const TimeoutUserSchema = z.object({
+  userId: z.string().min(1),
+  durationMinutes: z.number().min(1).max(10080), // Up to 7 days
+  reason: z.string().max(200).optional(),
 });
 
 export const ReactCommunityMessageSchema = z.object({
@@ -634,7 +659,7 @@ export const CreateCommunityChannelSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#38BDF8').optional(),
   topic: z.string().max(200).default('').optional(),
   category: z.string().default('CONDITION HUBS').optional(),
-  type: z.enum(['text', 'forum', 'announcement']).default('text').optional(),
+  type: z.enum(['text', 'forum', 'announcement', 'dm']).default('text').optional(),
   order: z.number().default(0).optional(),
 });
 
@@ -653,6 +678,11 @@ export const JoinCommunityServerSchema = z.object({
 });
 
 export type CreateCommunityMessageDto = z.infer<typeof CreateCommunityMessageSchema>;
+export type EditCommunityMessageDto = z.infer<typeof EditCommunityMessageSchema>;
+export type PinCommunityMessageDto = z.infer<typeof PinCommunityMessageSchema>;
+export type MarkChannelReadDto = z.infer<typeof MarkChannelReadSchema>;
+export type CreateDmChannelDto = z.infer<typeof CreateDmChannelSchema>;
+export type TimeoutUserDto = z.infer<typeof TimeoutUserSchema>;
 export type ReactCommunityMessageDto = z.infer<typeof ReactCommunityMessageSchema>;
 export type CreateForumPostDto = z.infer<typeof CreateForumPostSchema>;
 export type CreateCommunityChannelDto = z.infer<typeof CreateCommunityChannelSchema>;

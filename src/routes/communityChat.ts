@@ -6,12 +6,26 @@ import { validate } from '../middleware/validate';
 import { CommunityServer } from '../models/CommunityServer';
 import { CommunityChannel } from '../models/CommunityChannel';
 import { CommunityMessage } from '../models/CommunityMessage';
+import { ChannelReadState } from '../models/ChannelReadState';
+import { ServerTimeout } from '../models/ServerTimeout';
 import { ForumPost } from '../models/ForumPost';
 import { User } from '../models/User';
 import { Note } from '../models/Note';
 import { Task } from '../models/Task';
 import {
+  broadcastMessageCreated,
+  broadcastMessageUpdated,
+  broadcastMessageDeleted,
+  broadcastReactionUpdated,
+  broadcastPinsUpdated,
+} from '../services/socketService';
+import {
   CreateCommunityMessageSchema,
+  EditCommunityMessageSchema,
+  PinCommunityMessageSchema,
+  MarkChannelReadSchema,
+  CreateDmChannelSchema,
+  TimeoutUserSchema,
   ReactCommunityMessageSchema,
   CreateForumPostSchema,
   CreateCommunityServerSchema,
@@ -21,6 +35,30 @@ import {
 
 export const communityChatRouter = Router();
 communityChatRouter.use(authenticate);
+
+// ── AutoMod Keyword & Safehouse Filter ──────────────────
+const AUTOMOD_FORBIDDEN_PATTERNS = [
+  /miracle\s*mineral/i,
+  /bleach\s*cure/i,
+  /mms\s*cure/i,
+  /guaranteed\s*cure/i,
+  /stop\s*taking\s*(your\s*)?(insulin|meds|medication)/i,
+  /kill\s*yourself/i,
+  /\bkys\b/i,
+];
+
+function validateAutoMod(content: string): { blocked: boolean; reason?: string } {
+  for (const pattern of AUTOMOD_FORBIDDEN_PATTERNS) {
+    if (pattern.test(content)) {
+      return {
+        blocked: true,
+        reason:
+          'AutoMod: This message was blocked because it appears to contain unverified medical prescriptions or harmful advice. Lumen is a safe chronic illness pacing community.',
+      };
+    }
+  }
+  return { blocked: false };
+}
 
 function uid(req: AuthRequest): mongoose.Types.ObjectId {
   return new mongoose.Types.ObjectId(req.userId!);
@@ -560,6 +598,41 @@ communityChatRouter.get(
   }
 );
 
+// Helper to format messages with lean reaction objects
+function formatLeanMessage(msg: any, currentUserIdStr?: string) {
+  const reactionsObj: Record<string, number> = {};
+  if (msg.reactions) {
+    if (msg.reactions instanceof Map) {
+      msg.reactions.forEach((count: number, key: string) => {
+        if (count > 0) reactionsObj[key] = count;
+      });
+    } else if (typeof msg.reactions === 'object') {
+      for (const [k, v] of Object.entries(msg.reactions)) {
+        if (Number(v) > 0) reactionsObj[k] = Number(v);
+      }
+    }
+  }
+
+  let userReacts: string[] = [];
+  if (currentUserIdStr && msg.userReactions) {
+    if (msg.userReactions instanceof Map) {
+      userReacts = msg.userReactions.get(currentUserIdStr) || [];
+    } else if (typeof msg.userReactions === 'object') {
+      userReacts = (msg.userReactions as Record<string, string[]>)[currentUserIdStr] || [];
+    }
+  }
+
+  const raw = typeof msg.toObject === 'function' ? msg.toObject() : msg;
+  return {
+    ...raw,
+    _id: raw._id.toString(),
+    channelId: raw.channelId.toString(),
+    senderId: raw.senderId.toString(),
+    reactions: reactionsObj,
+    userReactions: userReacts,
+  };
+}
+
 // POST /api/v1/community/channels/:channelId/messages - post message with Discord inline reply and rich embed
 communityChatRouter.post(
   '/channels/:channelId/messages',
@@ -574,21 +647,49 @@ communityChatRouter.post(
         senderAvatarEmoji,
         senderRoleColor,
         senderRoleBadges,
+        mentions,
+        audioUrl,
+        audioDurationSeconds,
         replyTo,
         embedType,
         embedData,
       } = req.body;
 
-      // Validate channel
-      let targetChannelId: mongoose.Types.ObjectId;
-      if (mongoose.Types.ObjectId.isValid(channelId)) {
-        targetChannelId = new mongoose.Types.ObjectId(channelId);
-      } else {
-        const channel = await CommunityChannel.findOne({ slug: channelId });
-        if (!channel) {
-          return res.status(404).json({ success: false, message: 'Channel not found' });
+      // AutoMod safehouse inspection
+      if (content) {
+        const check = validateAutoMod(content);
+        if (check.blocked) {
+          return res.status(400).json({ success: false, message: check.reason });
         }
-        targetChannelId = channel._id as mongoose.Types.ObjectId;
+      }
+
+      // Validate channel
+      let targetChannel: any;
+      if (mongoose.Types.ObjectId.isValid(channelId)) {
+        targetChannel = await CommunityChannel.findById(channelId);
+      } else {
+        targetChannel = await CommunityChannel.findOne({ slug: channelId });
+      }
+
+      if (!targetChannel) {
+        return res.status(404).json({ success: false, message: 'Channel not found' });
+      }
+
+      const targetChannelId = targetChannel._id as mongoose.Types.ObjectId;
+
+      // Moderation timeout check: verify user is not timed out in this server
+      if (targetChannel.serverId) {
+        const activeTimeout = await ServerTimeout.findOne({
+          serverId: targetChannel.serverId,
+          userId,
+          timedOutUntil: { $gt: new Date() },
+        });
+        if (activeTimeout) {
+          return res.status(403).json({
+            success: false,
+            message: `You are temporarily timed out in this server until ${activeTimeout.timedOutUntil.toLocaleTimeString()}. Reason: ${activeTimeout.reason || 'Community guidelines violation'}`,
+          });
+        }
       }
 
       // Fetch user profile info
@@ -624,6 +725,9 @@ communityChatRouter.post(
         senderRoleBadges: roleBadges,
         isAnonymous: Boolean(isAnonymous),
         content: content || '',
+        mentions: mentions || [],
+        audioUrl,
+        audioDurationSeconds,
         replyTo: replyToData,
         threadMeta: { replyCount: 0 },
         embedType,
@@ -636,14 +740,18 @@ communityChatRouter.post(
       // Increment channel message count
       await CommunityChannel.findByIdAndUpdate(targetChannelId, { $inc: { messageCount: 1 } });
 
-      const resObj = message.toObject();
+      const formatted = formatLeanMessage(message, userId.toString());
+
+      // Broadcast real-time message creation via Socket.IO
+      const dmUserIds =
+        targetChannel.type === 'dm' && targetChannel.dmMemberIds
+          ? targetChannel.dmMemberIds.map((m: any) => m.toString())
+          : undefined;
+      broadcastMessageCreated(targetChannelId.toString(), formatted, dmUserIds);
+
       res.status(201).json({
         success: true,
-        data: {
-          ...resObj,
-          reactions: {},
-          userReactions: [],
-        },
+        data: formatted,
       });
     } catch (err) {
       next(err);
@@ -690,13 +798,416 @@ communityChatRouter.post(
         if (count > 0) reactionsObj[key] = count;
       });
 
+      const userReactions = message.userReactions.get(userId) || [];
+
+      // Broadcast reaction update to all users in channel room
+      broadcastReactionUpdated(message.channelId.toString(), {
+        messageId: message._id.toString(),
+        reactions: reactionsObj,
+        userReactions,
+      });
+
       res.json({
         success: true,
         data: {
           messageId: message._id,
           reactions: reactionsObj,
-          userReactions: message.userReactions.get(userId) || [],
+          userReactions,
         },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// PATCH /api/v1/community/channels/:channelId/messages/:messageId - Edit message content
+communityChatRouter.patch(
+  '/channels/:channelId/messages/:messageId',
+  validate(EditCommunityMessageSchema),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { channelId, messageId } = req.params;
+      const userId = uid(req);
+      const { content } = req.body;
+
+      // AutoMod inspection on edit
+      const check = validateAutoMod(content);
+      if (check.blocked) {
+        return res.status(400).json({ success: false, message: check.reason });
+      }
+
+      const message = await CommunityMessage.findById(messageId);
+      if (!message) {
+        return res.status(404).json({ success: false, message: 'Message not found' });
+      }
+
+      // Only message author can edit
+      if (message.senderId.toString() !== userId.toString()) {
+        return res.status(403).json({ success: false, message: 'Only author can edit this message' });
+      }
+
+      message.content = content;
+      message.isEdited = true;
+      message.editedAt = new Date();
+      await message.save();
+
+      const formatted = formatLeanMessage(message, userId.toString());
+      broadcastMessageUpdated(message.channelId.toString(), formatted);
+
+      res.json({ success: true, data: formatted });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// DELETE /api/v1/community/channels/:channelId/messages/:messageId - Delete message
+communityChatRouter.delete(
+  '/channels/:channelId/messages/:messageId',
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { channelId, messageId } = req.params;
+      const userId = uid(req);
+
+      const message = await CommunityMessage.findById(messageId);
+      if (!message) {
+        return res.status(404).json({ success: false, message: 'Message not found' });
+      }
+
+      // Check authorization: author or server owner
+      let canDelete = message.senderId.toString() === userId.toString();
+      if (!canDelete) {
+        const channel = await CommunityChannel.findById(message.channelId);
+        if (channel?.serverId) {
+          const server = await CommunityServer.findById(channel.serverId);
+          if (server && server.ownerId.toString() === userId.toString()) {
+            canDelete = true;
+          }
+        }
+      }
+
+      if (!canDelete) {
+        return res.status(403).json({ success: false, message: 'Not authorized to delete this message' });
+      }
+
+      await CommunityMessage.findByIdAndDelete(messageId);
+      await CommunityChannel.findByIdAndUpdate(message.channelId, { $inc: { messageCount: -1 } });
+
+      broadcastMessageDeleted(message.channelId.toString(), messageId);
+
+      res.json({ success: true, messageId });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/v1/community/channels/:channelId/messages/:messageId/pin - Toggle pin status
+communityChatRouter.post(
+  '/channels/:channelId/messages/:messageId/pin',
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { channelId, messageId } = req.params;
+      const userId = uid(req);
+
+      const message = await CommunityMessage.findById(messageId);
+      if (!message) {
+        return res.status(404).json({ success: false, message: 'Message not found' });
+      }
+
+      const user = await User.findById(userId);
+      const isCurrentlyPinned = Boolean(message.isPinned);
+
+      if (isCurrentlyPinned) {
+        message.isPinned = false;
+        message.pinnedAt = undefined;
+        message.pinnedBy = undefined;
+      } else {
+        message.isPinned = true;
+        message.pinnedAt = new Date();
+        message.pinnedBy = {
+          userId,
+          displayName: user?.name || 'Community Member',
+        };
+      }
+
+      await message.save();
+
+      const formatted = formatLeanMessage(message, userId.toString());
+      broadcastMessageUpdated(message.channelId.toString(), formatted);
+
+      res.json({ success: true, data: formatted });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// GET /api/v1/community/channels/:channelId/pins - List pinned messages in channel
+communityChatRouter.get(
+  '/channels/:channelId/pins',
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { channelId } = req.params;
+      const userId = uid(req);
+
+      let targetChannelId: mongoose.Types.ObjectId;
+      if (mongoose.Types.ObjectId.isValid(channelId)) {
+        targetChannelId = new mongoose.Types.ObjectId(channelId);
+      } else {
+        const channel = await CommunityChannel.findOne({ slug: channelId });
+        if (!channel) {
+          return res.status(404).json({ success: false, message: 'Channel not found' });
+        }
+        targetChannelId = channel._id as mongoose.Types.ObjectId;
+      }
+
+      const pins = await CommunityMessage.find({
+        channelId: targetChannelId,
+        isPinned: true,
+      })
+        .sort({ pinnedAt: -1, createdAt: -1 })
+        .lean();
+
+      const formatted = pins.map((p) => formatLeanMessage(p, userId.toString()));
+      res.json({ success: true, data: formatted });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/v1/community/channels/:channelId/read - Mark channel as read up to messageId
+communityChatRouter.post(
+  '/channels/:channelId/read',
+  validate(MarkChannelReadSchema),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { channelId } = req.params;
+      const userId = uid(req);
+      const { lastReadMessageId } = req.body;
+
+      let targetChannelId: mongoose.Types.ObjectId;
+      if (mongoose.Types.ObjectId.isValid(channelId)) {
+        targetChannelId = new mongoose.Types.ObjectId(channelId);
+      } else {
+        const channel = await CommunityChannel.findOne({ slug: channelId });
+        if (!channel) {
+          return res.status(404).json({ success: false, message: 'Channel not found' });
+        }
+        targetChannelId = channel._id as mongoose.Types.ObjectId;
+      }
+
+      const readState = await ChannelReadState.findOneAndUpdate(
+        { userId, channelId: targetChannelId },
+        {
+          $set: {
+            lastReadMessageId: lastReadMessageId && mongoose.Types.ObjectId.isValid(lastReadMessageId)
+              ? new mongoose.Types.ObjectId(lastReadMessageId)
+              : undefined,
+            lastReadAt: new Date(),
+          },
+        },
+        { upsert: true, new: true }
+      );
+
+      res.json({ success: true, data: readState });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// GET /api/v1/community/channels/:channelId/read - Get user's read state in channel
+communityChatRouter.get(
+  '/channels/:channelId/read',
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { channelId } = req.params;
+      const userId = uid(req);
+
+      let targetChannelId: mongoose.Types.ObjectId;
+      if (mongoose.Types.ObjectId.isValid(channelId)) {
+        targetChannelId = new mongoose.Types.ObjectId(channelId);
+      } else {
+        const channel = await CommunityChannel.findOne({ slug: channelId });
+        if (!channel) {
+          return res.status(404).json({ success: false, message: 'Channel not found' });
+        }
+        targetChannelId = channel._id as mongoose.Types.ObjectId;
+      }
+
+      const readState = await ChannelReadState.findOne({ userId, channelId: targetChannelId });
+      res.json({
+        success: true,
+        data: readState
+          ? {
+              lastReadMessageId: readState.lastReadMessageId?.toString(),
+              lastReadAt: readState.lastReadAt,
+            }
+          : null,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ────────── Direct Messages (DMs) API ──────────
+
+// GET /api/v1/community/dms - List all 1-on-1 DMs for current user
+communityChatRouter.get(
+  '/dms',
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = uid(req);
+
+      const dmChannels = await CommunityChannel.find({
+        type: 'dm',
+        dmMemberIds: userId,
+      })
+        .sort({ updatedAt: -1 })
+        .lean();
+
+      // Enrich with target user profile
+      const enriched = await Promise.all(
+        dmChannels.map(async (c: any) => {
+          const targetUserId = (c.dmMemberIds || []).find((id: any) => id.toString() !== userId.toString());
+          let dmUser: any = null;
+          if (targetUserId) {
+            const u = await User.findById(targetUserId).lean();
+            if (u) {
+              dmUser = {
+                _id: u._id.toString(),
+                displayName: u.name || 'Lumen Member',
+                avatarEmoji: '🌟',
+              };
+            }
+          }
+
+          // Fetch read state
+          const readState = await ChannelReadState.findOne({ userId, channelId: c._id });
+
+          return {
+            ...c,
+            _id: c._id.toString(),
+            name: dmUser?.displayName || c.name,
+            dmUser,
+            lastReadMessageId: readState?.lastReadMessageId?.toString(),
+          };
+        })
+      );
+
+      res.json({ success: true, data: enriched });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/v1/community/dms - Find or create 1-on-1 DM channel
+communityChatRouter.post(
+  '/dms',
+  validate(CreateDmChannelSchema),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = uid(req);
+      const { targetUserId } = req.body;
+
+      if (userId.toString() === targetUserId) {
+        return res.status(400).json({ success: false, message: 'Cannot start DM with yourself' });
+      }
+
+      const targetObjectId = new mongoose.Types.ObjectId(targetUserId);
+      const targetUser = await User.findById(targetObjectId);
+      if (!targetUser) {
+        return res.status(404).json({ success: false, message: 'Target user not found' });
+      }
+
+      // Check existing DM
+      let dmChannel = await CommunityChannel.findOne({
+        type: 'dm',
+        dmMemberIds: { $all: [userId, targetObjectId], $size: 2 },
+      });
+
+      if (!dmChannel) {
+        const slug = `dm-${userId.toString().slice(-4)}-${targetUserId.slice(-4)}-${Date.now().toString(36)}`;
+        dmChannel = await CommunityChannel.create({
+          slug,
+          name: targetUser.name || 'Direct Message',
+          description: `Direct conversation with ${targetUser.name || 'Member'}`,
+          icon: '💬',
+          color: '#EC4899',
+          topic: 'Private 1-on-1 conversation',
+          category: 'DIRECT MESSAGES',
+          type: 'dm',
+          dmMemberIds: [userId, targetObjectId],
+          order: 0,
+          memberCount: 2,
+          messageCount: 0,
+        });
+      }
+
+      const resObj = dmChannel.toObject();
+      res.status(201).json({
+        success: true,
+        data: {
+          ...resObj,
+          _id: resObj._id.toString(),
+          dmUser: {
+            _id: targetUser._id.toString(),
+            displayName: targetUser.name || 'Lumen Member',
+            avatarEmoji: '🌟',
+          },
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ────────── Moderation API ──────────
+
+// POST /api/v1/community/servers/:serverId/timeout - Timeout / mute a member in a server
+communityChatRouter.post(
+  '/servers/:serverId/timeout',
+  validate(TimeoutUserSchema),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const callerId = uid(req);
+      const { serverId } = req.params;
+      const { userId, durationMinutes, reason } = req.body;
+
+      const server = await CommunityServer.findById(serverId);
+      if (!server) {
+        return res.status(404).json({ success: false, message: 'Server not found' });
+      }
+
+      // Only server owner or guide can timeout
+      if (server.ownerId.toString() !== callerId.toString()) {
+        return res.status(403).json({ success: false, message: 'Only server owner can timeout members' });
+      }
+
+      const timedOutUntil = new Date(Date.now() + durationMinutes * 60 * 1000);
+
+      const timeoutRecord = await ServerTimeout.findOneAndUpdate(
+        { serverId: server._id, userId: new mongoose.Types.ObjectId(userId) },
+        {
+          $set: {
+            timedOutUntil,
+            reason: reason || 'Violation of community pacing/respect guidelines',
+            timedOutBy: callerId,
+          },
+        },
+        { upsert: true, new: true }
+      );
+
+      res.json({
+        success: true,
+        message: `User timed out until ${timedOutUntil.toLocaleTimeString()}`,
+        data: timeoutRecord,
       });
     } catch (err) {
       next(err);
