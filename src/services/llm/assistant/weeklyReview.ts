@@ -59,7 +59,7 @@ export async function generateWeeklyReview(
   }
 
   const result = await runAssistant({
-    userId, history: [], message: reviewPrompt(week.weekStart, week.weekEnd), budgetMs: REVIEW_BUDGET_MS, effort: 'high',
+    userId, history: [], message: reviewPrompt(week.weekStart, week.weekEnd), budgetMs: REVIEW_BUDGET_MS, effort: 'high', allowWrites: false,
   });
   if (result.error) return { report: null, error: result.error };
 

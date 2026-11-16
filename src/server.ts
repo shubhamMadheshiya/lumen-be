@@ -2,6 +2,7 @@ import { createApp } from './app';
 import { connectDB } from './db';
 import { config } from './config';
 import { startInsightScheduler } from './jobs/insightScheduler';
+import { startAiNotificationScheduler } from './jobs/aiNotificationScheduler';
 
 async function main(): Promise<void> {
   await connectDB();
@@ -10,6 +11,7 @@ async function main(): Promise<void> {
 
   // Start the nightly insight computation job
   startInsightScheduler();
+  startAiNotificationScheduler();
 
   app.listen(config.port, () => {
     console.log(`[server] Lumen API listening on http://localhost:${config.port}`);

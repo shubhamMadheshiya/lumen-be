@@ -9,6 +9,8 @@ export interface IAiMessage {
   provider?: 'gemini' | 'claude';
   llmModel?: string;
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+  /** Notes and template drafts this reply made. */
+  artifacts?: { type: 'note' | 'template_draft'; id: string; title: string }[];
 }
 
 /** One Lumen AI chat thread. Only the member who owns it can read it. */
@@ -35,6 +37,10 @@ const AiMessageSchema = new Schema<IAiMessage>(
       outputTokens: { type: Number },
       cacheReadTokens: { type: Number },
       cacheWriteTokens: { type: Number },
+    },
+    artifacts: {
+      type: [new Schema({ type: { type: String, enum: ['note', 'template_draft'] }, id: String, title: String }, { _id: false })],
+      default: undefined,
     },
   },
   { _id: true },

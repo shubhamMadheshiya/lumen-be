@@ -18,6 +18,13 @@ import { generateWeeklyReview } from '../services/llm/assistant/weeklyReview';
 import { decideAccess } from '../services/llm/assistant/access';
 import { defaultModelFor, estimateUsd, findModel, isProviderConfigured, listModels, resolveModel, type AiModelInfo } from '../services/llm/assistant/models';
 import { DEFAULT_TTS_VOICE, isKnownVoice, MAX_TTS_CHARS, synthesizeSpeech, TTS_VOICES } from '../services/llm/tts';
+import { AiNotification } from '../models/AiNotification';
+import { deliverAiNote } from '../services/aiNotify/run';
+import { Note } from '../models/Note';
+import { AiTemplateDraft } from '../models/AiTemplateDraft';
+import { createAiNote } from '../services/notes/aiNoteWriter';
+import { createDoctorVisitNote, NOTE_ACTIONS, runNoteAction } from '../services/notes/aiNoteActions';
+import { applyDraft, DraftError, draftPayload, undoDraft } from '../services/templates/aiTemplateDraft';
 
 export const aiRouter = Router();
 aiRouter.use(authenticate);
@@ -49,6 +56,7 @@ async function requireFullAccess(req: AuthRequest, res: Response, next: NextFunc
 type Prefs = {
   aiFullAccess?: boolean; aiPhotoAccess?: boolean; aiFreeTierAcknowledgedAt?: Date; aiClaudeAcknowledgedAt?: Date;
   aiProvider?: string; aiModel?: string; aiVoice?: { ttsVoice?: string; natural?: boolean; sttLang?: string };
+  aiJournal?: boolean;
 };
 
 const modelLabel = (id?: string) => (id ? findModel(id)?.label ?? id : undefined);
@@ -68,6 +76,8 @@ function accessPayload(prefs: Prefs | undefined, hasPhotoPin: boolean) {
     modelLabel: model.label,
     /** The member picked a model that can't run now (e.g. Claude without a key); Gemini answers instead. */
     chosenModelUnavailable: fellBack,
+    /** Daily health journal note (on unless turned off). */
+    journal: prefs?.aiJournal !== false,
     voice: {
       ttsVoice: prefs?.aiVoice?.ttsVoice && isKnownVoice(prefs.aiVoice.ttsVoice) ? prefs.aiVoice.ttsVoice : DEFAULT_TTS_VOICE,
       natural: prefs?.aiVoice?.natural ?? true,
@@ -95,6 +105,7 @@ function full(c: IAiConversationDoc) {
       id: String((m as unknown as { _id: unknown })._id),
       role: m.role, text: m.text, mediaIds: m.mediaIds ?? [], createdAt: m.createdAt,
       provider: m.provider ?? null, model: m.llmModel ?? null, modelLabel: modelLabel(m.llmModel) ?? null,
+      artifacts: m.artifacts ?? [],
     })),
   };
 }
@@ -198,6 +209,7 @@ async function chatTurn(userId: string, conv: IAiConversationDoc, message: strin
   conv.messages.push({
     role: 'assistant', text: result.text, mediaIds: [], createdAt: new Date(),
     provider: result.provider, llmModel: result.model, usage: result.usage,
+    ...(result.artifacts.length ? { artifacts: result.artifacts } : {}),
   });
   await conv.save();
   return { result, saved: true };
@@ -227,6 +239,7 @@ aiRouter.post('/chat', requireFullAccess, async (req: AuthRequest, res: Response
         model: result.model,
         modelLabel: modelLabel(result.model),
         fellBack: result.fellBack,
+        artifacts: result.artifacts,
       },
     });
   } catch (err) { next(err); }
@@ -326,6 +339,7 @@ aiRouter.get('/models', async (req: AuthRequest, res: Response, next: NextFuncti
 const SettingsSchema = z.object({
   model: z.string().max(80).optional(),
   acknowledgeClaude: z.boolean().optional(),
+  journal: z.boolean().optional(),
   voice: z.object({
     ttsVoice: z.string().max(40).refine(isKnownVoice, 'unknown voice').optional(),
     natural: z.boolean().optional(),
@@ -360,6 +374,7 @@ aiRouter.patch('/settings', requireFullAccess, async (req: AuthRequest, res: Res
       prefs.aiProvider = m.provider;
       prefs.aiModel = m.id;
     }
+    if (body.journal !== undefined) prefs.aiJournal = body.journal;
     if (body.voice) {
       prefs.aiVoice = { ...(prefs.aiVoice ?? {}), ...body.voice };
     }
@@ -442,5 +457,160 @@ aiRouter.post('/tts', requireFullAccess, async (req: AuthRequest, res: Response,
     const out = await synthesizeSpeech(parsed.data.text, voice);
     if (!out.ok) return res.json({ success: true, data: { fallback: true, reason: out.error } });
     res.json({ success: true, data: { fallback: false, mimeType: out.mimeType, base64: out.base64 } });
+  } catch (err) { next(err); }
+});
+
+
+// ── Lumen AI notifications ───────────────────────────────────────────────────
+
+function notePayload(n: { _id: unknown; kind: string; title: string; body: string; route: string; conversationId?: string; pushed: boolean; reason?: string; dateKey: string; createdAt: Date }) {
+  return {
+    id: String(n._id), kind: n.kind, title: n.title, body: n.body, route: n.route,
+    conversationId: n.conversationId ?? null, pushed: n.pushed, reason: n.reason ?? null, dateKey: n.dateKey, createdAt: n.createdAt,
+  };
+}
+
+/** Recent AI notifications, so the app can show them in "For you today" even if the push came while it was closed. */
+aiRouter.get('/notifications', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const sinceRaw = typeof req.query.since === 'string' ? Date.parse(req.query.since) : NaN;
+    const since = Number.isFinite(sinceRaw) ? new Date(sinceRaw) : new Date(Date.now() - 2 * 86_400_000);
+    const list = await AiNotification.find({ userId: req.userId, createdAt: { $gt: since } }).sort({ createdAt: -1 }).limit(20).lean();
+    res.json({ success: true, data: list.map(notePayload) });
+  } catch (err) { next(err); }
+});
+
+/** Settings → "Send a test": writes a briefing now and pushes it, whatever the budget (3 a day). */
+aiRouter.post('/notifications/test', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const out = await deliverAiNote(req.userId!, 'briefing', { test: true });
+    if (out.status === 'limit') return res.status(429).json({ success: false, code: 'TEST_LIMIT', message: 'You can send 3 test notifications a day.' });
+    if (out.status !== 'saved') {
+      return res.json({ success: true, data: { notification: null, error: 'reason' in out ? out.reason : out.status } });
+    }
+    const n = out.notification;
+    res.json({ success: true, data: { notification: notePayload(n), error: n.pushed ? null : n.reason ?? 'not_pushed' } });
+  } catch (err) { next(err); }
+});
+
+
+// ── Lumen AI notes ───────────────────────────────────────────────────────────
+
+/** "Save as note" on a chat reply (also photo analyses). No AI call: the reply becomes the note. */
+aiRouter.post('/conversations/:id/messages/:messageId/save-note', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Not found' });
+    const conv = await AiConversation.findOne({ _id: req.params.id, userId: req.userId });
+    const msg = conv?.messages.find(m => String((m as unknown as { _id: unknown })._id) === req.params.messageId);
+    if (!conv || !msg || !msg.text.trim()) return res.status(404).json({ success: false, message: 'Message not found' });
+    const note = await createAiNote(req.userId!, { title: conv.title || 'Lumen AI', markdown: msg.text, icon: '✨' });
+    res.status(201).json({ success: true, data: { noteId: String(note._id), title: note.title } });
+  } catch (err) { next(err); }
+});
+
+aiRouter.post('/weekly-reports/:id/save-note', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Not found' });
+    const report = await AiWeeklyReport.findOne({ _id: req.params.id, userId: req.userId }).lean();
+    if (!report) return res.status(404).json({ success: false, message: 'Review not found' });
+    const note = await createAiNote(req.userId!, {
+      title: `Weekly review · ${report.weekStart} to ${report.weekEnd}`, markdown: report.text, icon: '🗓️', tags: ['weekly-review'],
+    });
+    res.status(201).json({ success: true, data: { noteId: String(note._id), title: note.title } });
+  } catch (err) { next(err); }
+});
+
+const DoctorVisitSchema = z.object({ weeks: z.number().int().min(2).max(12).default(4) });
+
+aiRouter.post('/notes/doctor-visit', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const parsed = DoctorVisitSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ success: false, message: 'weeks must be 2-12' });
+    const out = await createDoctorVisitNote(req.userId!, parsed.data.weeks);
+    if (!out.ok) return res.json({ success: true, data: { noteId: null, error: out.reason } });
+    res.status(201).json({ success: true, data: { noteId: out.noteId, error: null } });
+  } catch (err) { next(err); }
+});
+
+const NoteActionSchema = z.object({ action: z.enum(NOTE_ACTIONS) });
+
+aiRouter.post('/notes/:id/action', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const parsed = NoteActionSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ success: false, message: 'Unknown action' });
+    const out = await runNoteAction(req.userId!, req.params.id, parsed.data.action);
+    if (!out.ok && out.reason === 'not_found') return res.status(404).json({ success: false, message: 'Note not found' });
+    if (!out.ok) return res.json({ success: true, data: { noteId: null, created: false, note: null, error: out.reason } });
+    const note = await Note.findById(out.noteId).lean();
+    res.json({ success: true, data: { noteId: out.noteId, created: out.created, note, error: null } });
+  } catch (err) { next(err); }
+});
+
+// ── Lumen AI log templates ───────────────────────────────────────────────────
+
+const GenerateDraftSchema = z.object({
+  request: z.string().trim().max(500).optional(),
+  mode: z.enum(['create', 'improve']).default('create'),
+});
+
+aiRouter.post('/template-drafts/generate', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const parsed = GenerateDraftSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ success: false, message: 'Invalid request.' });
+    const { request, mode } = parsed.data;
+    const message = mode === 'improve'
+      ? 'Look at my tracking setup and how I use it (get_tracking_setup), then suggest improvements with propose_log_template: options for things I keep typing under "Other", useful things missing for my conditions (reuse the Lumen library first), and archiving items I have not used for two months or more. Then tell me in one or two sentences what you suggested.'
+      : `I want to track ${request ? `this: ${request}` : 'my condition(s)'}. Use what you know about me (my conditions, what I log and what we talked about). Call get_tracking_setup, then propose_log_template (reuse the Lumen library first, skip what I already track). Then tell me in one or two sentences what you proposed.`;
+    const result = await runAssistant({ userId: req.userId!, history: [], message, effort: 'medium', budgetMs: 120_000 });
+    const draft = result.artifacts.find(a => a.type === 'template_draft');
+    res.json({ success: true, data: { draftId: draft?.id ?? null, reply: result.text, error: result.error ?? (draft ? null : 'no_draft') } });
+  } catch (err) { next(err); }
+});
+
+async function ownDraft(req: AuthRequest) {
+  return mongoose.isValidObjectId(req.params.id) ? AiTemplateDraft.findOne({ _id: req.params.id, userId: req.userId }) : null;
+}
+
+aiRouter.get('/template-drafts/:id', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const draft = await ownDraft(req);
+    if (!draft) return res.status(404).json({ success: false, message: 'Not found' });
+    res.json({ success: true, data: draftPayload(draft) });
+  } catch (err) { next(err); }
+});
+
+const ApplyDraftSchema = z.object({
+  items: z.record(z.object({ include: z.boolean().optional(), label: z.string().max(200).optional() })).default({}),
+});
+
+function draftError(res: Response, err: unknown) {
+  if (err instanceof DraftError) {
+    res.status(err.code === 'NOT_FOUND' ? 404 : 409).json({ success: false, code: err.code, message: err.message });
+    return true;
+  }
+  return false;
+}
+
+aiRouter.post('/template-drafts/:id/apply', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const parsed = ApplyDraftSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ success: false, message: 'Invalid request.' });
+    const draft = await applyDraft(req.userId!, req.params.id, parsed.data.items);
+    res.json({ success: true, data: draftPayload(draft) });
+  } catch (err) { if (!draftError(res, err)) next(err); }
+});
+
+aiRouter.post('/template-drafts/:id/undo', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const draft = await undoDraft(req.userId!, req.params.id);
+    res.json({ success: true, data: draftPayload(draft) });
+  } catch (err) { if (!draftError(res, err)) next(err); }
+});
+
+aiRouter.delete('/template-drafts/:id', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const draft = await ownDraft(req);
+    if (draft && draft.status === 'draft') { draft.status = 'discarded'; await draft.save(); }
+    res.json({ success: true });
   } catch (err) { next(err); }
 });

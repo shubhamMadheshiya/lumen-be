@@ -32,6 +32,9 @@ export interface IUserDoc extends Document {
     aiClaudeAcknowledgedAt?: Date;
     /** Voice chat: Gemini voice name, natural AI voice vs the phone's own, listening language. */
     aiVoice?: { ttsVoice?: string; natural?: boolean; sttLang?: 'en-IN' | 'hi-IN' };
+    /** Lumen AI daily health journal (default on while full access is on), and its note. */
+    aiJournal?: boolean;
+    aiJournalNoteId?: string;
   };
   consentAcceptedAt?: Date;
   configVersion: number;
@@ -69,6 +72,8 @@ const UserSchema = new Schema<IUserDoc>(
         natural:  { type: Boolean, default: true },
         sttLang:  { type: String, enum: ['en-IN', 'hi-IN'], default: 'en-IN' },
       },
+      aiJournal:       { type: Boolean },
+      aiJournalNoteId: { type: String },
     },
     consentAcceptedAt: { type: Date },
     configVersion:     { type: Number, default: 1 },

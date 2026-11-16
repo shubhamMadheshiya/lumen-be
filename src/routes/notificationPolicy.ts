@@ -9,12 +9,15 @@ import {
   INotificationPolicyDoc,
 } from '../models/NotificationPolicy';
 import { evaluateFlareMode } from '../services/flareModeService';
+import { PushToken } from '../models/PushToken';
+import { isExpoPushToken } from '../services/push/pushService';
 
 export const notificationPolicyRouter = Router();
 notificationPolicyRouter.use(authenticate);
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
-const NOTIFICATION_TYPES = ['SAFETY', 'MEDICATION', 'PACING', 'FLARE_RISK', 'TRIGGER_WATCH', 'HYGIENE'];
+const NOTIFICATION_TYPES = ['SAFETY', 'MEDICATION', 'PACING', 'FLARE_RISK', 'TRIGGER_WATCH', 'HYGIENE', 'AI_NOTE'];
+const AI_TIME_KEYS = ['briefing', 'nudge', 'checkIn'] as const;
 
 function uid(req: AuthRequest): mongoose.Types.ObjectId {
   return new mongoose.Types.ObjectId(req.userId!);
@@ -27,6 +30,7 @@ function serialize(p: INotificationPolicyDoc) {
     quietHours: p.quietHours,
     flareMode: p.flareMode,
     capabilities: p.capabilities,
+    aiTimes: p.aiTimes ?? { briefing: '08:00', nudge: '13:30', checkIn: '20:30' },
     mutedUntil: p.mutedUntil ?? null,
     suppressedTypes: p.suppressedTypes,
     careTeamPhone: p.careTeamPhone ?? null,
@@ -83,6 +87,16 @@ notificationPolicyRouter.put('/', async (req: AuthRequest, res: Response, next: 
       }
     }
     if (b.safetyConsent === true && !policy.safetyConsentAt) policy.safetyConsentAt = new Date();
+
+    if (b.aiTimes !== undefined) {
+      for (const k of AI_TIME_KEYS) {
+        const v = b.aiTimes?.[k];
+        if (v === undefined) continue;
+        // Quarter hours only: the Lumen AI scheduler wakes every 15 minutes.
+        if (typeof v !== 'string' || !HHMM.test(v) || Number(v.slice(3)) % 15 !== 0) errors.push(`aiTimes.${k} must be HH:mm on a quarter hour`);
+        else policy.aiTimes = { ...(policy.aiTimes ?? { briefing: '08:00', nudge: '13:30', checkIn: '20:30' }), [k]: v };
+      }
+    }
     if (b.flareAutoDetect !== undefined) {
       if (typeof b.flareAutoDetect !== 'boolean') errors.push('flareAutoDetect must be a boolean');
       else policy.flareMode.auto = b.flareAutoDetect;
@@ -186,5 +200,31 @@ notificationPolicyRouter.post('/events', async (req: AuthRequest, res: Response,
       { upsert: true, new: true },
     );
     res.status(201).json({ success: true, data: event });
+  } catch (err) { next(err); }
+});
+
+
+// POST /notification-policy/push-token  { token, platform } — this phone can get Lumen AI notifications
+notificationPolicyRouter.post('/push-token', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { token, platform } = req.body ?? {};
+    if (!isExpoPushToken(token)) return res.status(400).json({ success: false, message: 'Invalid Expo push token' });
+    const p = ['android', 'ios', 'web'].includes(platform) ? platform : 'android';
+    // A token belongs to whoever registered it last (a phone that switched accounts).
+    await PushToken.findOneAndUpdate(
+      { token },
+      { $set: { userId: uid(req), platform: p, lastSeenAt: new Date() } },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// DELETE /notification-policy/push-token  { token } — on logout
+notificationPolicyRouter.delete('/push-token', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const token = req.body?.token ?? req.query.token;
+    if (typeof token === 'string') await PushToken.deleteOne({ token, userId: uid(req) });
+    res.json({ success: true });
   } catch (err) { next(err); }
 });

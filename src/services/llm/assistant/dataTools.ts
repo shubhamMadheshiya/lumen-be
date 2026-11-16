@@ -40,6 +40,14 @@ export interface ToolResult {
   response: Record<string, unknown>;
   /** Photos the model asked to look at; sent back to it as image parts. */
   images?: Array<PhotoForAi & { mediaId: string }>;
+  /** Something the tool made for the member (a note, a template draft), shown as a card under the reply. */
+  artifact?: AssistantArtifact;
+}
+
+export interface AssistantArtifact {
+  type: 'note' | 'template_draft';
+  id: string;
+  title: string;
 }
 
 const DEFAULT_DAYS = 30;

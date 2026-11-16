@@ -7,6 +7,7 @@ import { LogEntry } from '../models/LogEntry';
 import { CreateLogEntrySchema, BatchLogEntrySchema } from '../shared';
 import { z } from 'zod';
 import { evaluateRedFlags, mergeFlags, RED_FLAG_CONFIG, FlagEntry, RedFlag } from '../services/safety/redFlags';
+import { reactToNewEntries } from '../services/aiNotify/run';
 
 export const logsRouter = Router();
 logsRouter.use(authenticate);
@@ -48,6 +49,8 @@ logsRouter.post('/', validate(CreateLogEntrySchema), async (req: AuthRequest, re
     });
     const flags = await flagsForNewEntries(userId, [body]);
     res.status(201).json({ success: true, data: entry, ...(flags.length ? { safety: { flags } } : {}) });
+    // Lumen AI replies to a serious log (after the response; never blocks the save).
+    reactToNewEntries(String(userId), [entry.toObject()], flags);
   } catch (err) { next(err); }
 });
 
@@ -58,16 +61,19 @@ logsRouter.post('/batch', validate(BatchLogEntrySchema), async (req: AuthRequest
     const { entries } = req.body as z.infer<typeof BatchLogEntrySchema>;
 
     const created: typeof entries = [];
+    const createdDocs: { _id: unknown; occurredAt: Date; answers?: unknown[] }[] = [];
     const results = await Promise.all(entries.map(async (body) => {
       const existing = await LogEntry.findOne({ userId, clientId: body.clientId });
       if (existing) return { clientId: body.clientId, status: 'duplicate', id: existing._id };
       const entry = await LogEntry.create({ ...body, userId, loggedAt: new Date() });
       created.push(body);
+      createdDocs.push(entry.toObject());
       return { clientId: body.clientId, status: 'created', id: entry._id };
     }));
 
     const flags = await flagsForNewEntries(userId, created);
     res.status(201).json({ success: true, data: results, ...(flags.length ? { safety: { flags } } : {}) });
+    reactToNewEntries(String(userId), createdDocs as Parameters<typeof reactToNewEntries>[1], flags);
   } catch (err) { next(err); }
 });
 

@@ -6,6 +6,11 @@ export const INTELLIGENCE_CAPABILITIES = [
   'triggerWatch',
   'pacing',
   'safety',
+  // Lumen AI notifications (only run while Lumen AI full access is on).
+  'aiBriefing',
+  'aiNudge',
+  'aiLogReply',
+  'aiCheckIn',
 ] as const;
 export type IntelligenceCapability = (typeof INTELLIGENCE_CAPABILITIES)[number];
 
@@ -21,6 +26,8 @@ export interface INotificationPolicyDoc extends Document {
     activatedAt?: Date;
   };
   capabilities: Record<IntelligenceCapability, boolean>;
+  /** Local times (HH:mm) for the Lumen AI briefing, midday nudge and evening check-in. */
+  aiTimes: { briefing: string; nudge: string; checkIn: string };
   mutedUntil?: Date;
   suppressedTypes: string[];
   careTeamPhone?: string;
@@ -52,6 +59,15 @@ const NotificationPolicySchema = new Schema<INotificationPolicyDoc>(
       pacing:         { type: Boolean, default: true },
       // Stays off until the patient gives explicit consent in the app.
       safety:         { type: Boolean, default: false },
+      aiBriefing:     { type: Boolean, default: true },
+      aiNudge:        { type: Boolean, default: true },
+      aiLogReply:     { type: Boolean, default: true },
+      aiCheckIn:      { type: Boolean, default: true },
+    },
+    aiTimes: {
+      briefing: { type: String, default: '08:00', match: /^\d{2}:\d{2}$/ },
+      nudge:    { type: String, default: '13:30', match: /^\d{2}:\d{2}$/ },
+      checkIn:  { type: String, default: '20:30', match: /^\d{2}:\d{2}$/ },
     },
     mutedUntil:       { type: Date },
     suppressedTypes:  [{ type: String }],

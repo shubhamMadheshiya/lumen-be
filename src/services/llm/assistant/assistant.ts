@@ -12,7 +12,8 @@
 import { User } from '../../../models/User';
 import { DEFAULT_BOUNDARY_HOUR, resolveTimeZone, trackingDayKey } from '../../../utils/dayKey';
 import { classifyQuestion } from '../router';
-import { runTool, TOOL_DECLARATIONS, type ToolContext } from './dataTools';
+import { runTool, TOOL_DECLARATIONS, type AssistantArtifact, type ToolContext } from './dataTools';
+import { runWriteTool, WRITE_TOOL_DECLARATIONS, WRITE_TOOL_NAMES, WRITING_TOOLS } from './writeTools';
 import { getPhotoForAi } from './mediaBytes';
 import { resolveModel, type AiModelInfo } from './models';
 import { getProvider } from './providers';
@@ -47,6 +48,8 @@ export interface AssistantResult {
   usage: Usage;
   /** The member's chosen model wasn't usable (no key / unknown), so the Gemini default answered. */
   fellBack: boolean;
+  /** Notes and template drafts this answer made (shown as cards under the reply). */
+  artifacts: AssistantArtifact[];
   /** Set when the answer is a fallback message rather than a model answer. */
   error?: AssistantError;
 }
@@ -76,7 +79,14 @@ This reply will be spoken aloud in a voice conversation:
 - Say numbers and dates the way a person would ("about 7 hours", "last Tuesday").
 - Give the main point first; offer to go into detail instead of listing everything.`;
 
-function systemPrompt(ctx: ToolContext, name: string, conditions: string[], voice: boolean): string {
+const WRITE_RULES = `
+Notes and tracking (you can create things for the member):
+- Create a note (create_note) or add to one (append_to_note) only when they ask for it, or after you offer and they agree. Write it in clean Markdown with headings, bullets and checklists, in their language. Say the note was saved.
+- Log templates: when they ask to track a disease or symptoms, or agree to your offer, call get_tracking_setup, then propose_log_template. Reuse Lumen library keys first and skip what they already track. Fit it to what you know about them (conditions, symptoms they mention, what they log). This only creates a DRAFT: tell them to tap "Review" to check and add it. Never say it was added.
+- If, while talking, they describe something they don't track yet (it isn't in get_tracking_setup), offer once to make a tracker for it. Don't create anything until they agree.
+- If they ask to clean up their tracking, use get_tracking_setup: suggest adding options for what they keep typing under "Other", and archiving things unused for months (their logs are kept).`;
+
+function systemPrompt(ctx: ToolContext, name: string, conditions: string[], voice: boolean, writes = false): string {
   const who = conditions.length ? `${name}, who lives with ${conditions.join(', ')}` : name;
   return `You are Lumen AI, a personal health-data assistant for ${who}. You can read ALL of their own Lumen data through the tools, including free-text notes and photos (some are sensitive: stool, urine, skin). They have explicitly asked you to analyse everything, without holding back.
 
@@ -89,7 +99,7 @@ How to work:
 - On starting, stopping or changing a medicine: give your view, and say to confirm with their doctor. Never tell them to stop a prescribed medicine abruptly.
 - If anything suggests an emergency (chest pain with breathlessness, heavy bleeding, very high fever while on immunosuppressants, sudden loss of vision, confusion), say clearly to get urgent care now (India: 112).
 - Today is ${ctx.today}. Dates are Lumen days (YYYY-MM-DD) that start at ${ctx.boundaryHour}:00 in ${ctx.timeZone}.
-- Reply in the language the member writes in (English, Hindi or Hinglish). Short paragraphs and simple "- " bullets. Use **bold** for short labels instead of # headings. No tables.${voice ? `\n${VOICE_RULES}` : ''}`;
+- Reply in the language the member writes in (English, Hindi or Hinglish). Short paragraphs and simple "- " bullets. Use **bold** for short labels instead of # headings. No tables.${writes ? `\n${WRITE_RULES}` : ''}${voice ? `\n${VOICE_RULES}` : ''}`;
 }
 
 export async function buildToolContext(userId: string): Promise<{ ctx: ToolContext; name: string; conditions: string[]; prefs: { aiProvider?: string; aiModel?: string } } | null> {
@@ -122,6 +132,15 @@ export function cleanReply(text: string): string {
     .replace(/^[\s,.;:]+/, '');
 }
 
+/**
+ * Both providers need the conversation to start with the member. A chat opened from a Lumen AI
+ * notification starts with the AI's note, so say where it came from.
+ */
+export function withUserFirst<T extends { role: 'user' | 'assistant'; text: string }>(history: T[]): T[] {
+  if (history[0]?.role !== 'assistant') return history;
+  return [{ ...history[0], role: 'user', text: '(Lumen AI sent me this notification.)' }, ...history];
+}
+
 const addUsage = (a: Usage, b?: Usage): Usage => ({
   inputTokens: a.inputTokens + (b?.inputTokens ?? 0),
   outputTokens: a.outputTokens + (b?.outputTokens ?? 0),
@@ -140,14 +159,18 @@ export async function runAssistant(opts: {
   voice?: boolean;
   /** How hard Claude should think; defaults to medium (low for voice). */
   effort?: Effort;
+  /** Chat may create notes and template drafts. Background runs (weekly review, notifications) pass false. Default true. */
+  allowWrites?: boolean;
 }): Promise<AssistantResult> {
   const started = Date.now();
   const built = await buildToolContext(opts.userId);
   const { model, fellBack } = resolveModel(built?.prefs);
   const zero: Usage = { inputTokens: 0, outputTokens: 0 };
   const base = { provider: model.provider, model: model.id, fellBack };
-  if (!built) return { ...base, text: failureText('failed', model.provider), requests: 0, toolCalls: [], usage: zero, error: 'failed' };
+  if (!built) return { ...base, text: failureText('failed', model.provider), requests: 0, toolCalls: [], usage: zero, artifacts: [], error: 'failed' };
   const { ctx } = built;
+  const allowWrites = opts.allowWrites !== false;
+  const tools = [...TOOL_DECLARATIONS, ...WRITE_TOOL_DECLARATIONS.filter(t => allowWrites || !WRITING_TOOLS.has(t.name))];
   const budget = Math.max(opts.budgetMs ?? 0, model.budgetMs);
 
   // The member's own attachments go in with the question.
@@ -164,17 +187,18 @@ export async function runAssistant(opts: {
 
   const session = getProvider(model.provider).startSession({
     model: model.id,
-    system: systemPrompt(ctx, built.name, built.conditions, !!opts.voice),
-    history: opts.history.slice(-HISTORY_MESSAGES).map(m => ({
+    system: systemPrompt(ctx, built.name, built.conditions, !!opts.voice, allowWrites),
+    history: withUserFirst(opts.history.slice(-HISTORY_MESSAGES).map(m => ({
       role: m.role,
       text: m.mediaIds?.length ? `${m.text}\n(attached photo ids: ${m.mediaIds.join(', ')})` : m.text || '(photo)',
-    })),
+    }))),
     userParts,
-    tools: TOOL_DECLARATIONS,
+    tools,
     effort: opts.effort ?? (opts.voice ? 'low' : 'medium'),
   });
 
   const toolCalls: string[] = [];
+  const artifacts: AssistantArtifact[] = [];
   let usage = zero;
   let requests = 0;
   let imagesShown = 0;
@@ -214,7 +238,12 @@ export async function runAssistant(opts: {
         results.push({ id: call.id, name: call.name, response: { ok: false, reason: `Already viewed ${MAX_IMAGES_PER_ANSWER} photos for this answer.` } });
         continue;
       }
-      const result = await runTool(ctx, call.name, call.args);
+      const result = !WRITE_TOOL_NAMES.has(call.name)
+        ? await runTool(ctx, call.name, call.args)
+        : allowWrites || !WRITING_TOOLS.has(call.name)
+          ? await runWriteTool(ctx, call.name, call.args)
+          : { response: { ok: false, error: 'Creating notes or templates is not available here.' } };
+      if (result.artifact && !artifacts.some(a => a.id === result.artifact!.id)) artifacts.push(result.artifact);
       const images = (result.images ?? []).map(img => {
         imagesShown++;
         return { label: `Photo ${img.mediaId} (taken ${img.takenAt.toISOString().slice(0, 10)}):`, mimeType: img.mimeType, base64: img.base64 };
@@ -227,5 +256,5 @@ export async function runAssistant(opts: {
   if (!answer && !error) error = 'failed';
   let text = answer || failureText(error ?? 'failed', model.provider);
   if (classifyQuestion(opts.message) === 'crisis') text = `${EMERGENCY_PREFIX}\n\n${text}`;
-  return { ...base, text, requests, toolCalls, usage, ...(answer ? {} : { error }) };
+  return { ...base, text, requests, toolCalls, usage, artifacts, ...(answer ? {} : { error }) };
 }
