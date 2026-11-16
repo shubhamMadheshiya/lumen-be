@@ -25,6 +25,13 @@ export interface IUserDoc extends Document {
     aiPhotoAccess: boolean;
     /** When the member confirmed they read the Gemini free-tier data-use notice. */
     aiFreeTierAcknowledgedAt?: Date;
+    /** Lumen AI provider + model the member picked (POST/PATCH /ai/settings only). Unset = Gemini default. */
+    aiProvider?: 'gemini' | 'claude';
+    aiModel?: string;
+    /** When the member confirmed the Claude (paid) notice. */
+    aiClaudeAcknowledgedAt?: Date;
+    /** Voice chat: Gemini voice name, natural AI voice vs the phone's own, listening language. */
+    aiVoice?: { ttsVoice?: string; natural?: boolean; sttLang?: 'en-IN' | 'hi-IN' };
   };
   consentAcceptedAt?: Date;
   configVersion: number;
@@ -54,6 +61,14 @@ const UserSchema = new Schema<IUserDoc>(
       aiFullAccess:    { type: Boolean, default: false },
       aiPhotoAccess:   { type: Boolean, default: false },
       aiFreeTierAcknowledgedAt: { type: Date },
+      aiProvider:      { type: String, enum: ['gemini', 'claude'] },
+      aiModel:         { type: String, maxlength: 80 },
+      aiClaudeAcknowledgedAt: { type: Date },
+      aiVoice: {
+        ttsVoice: { type: String, maxlength: 40 },
+        natural:  { type: Boolean, default: true },
+        sttLang:  { type: String, enum: ['en-IN', 'hi-IN'], default: 'en-IN' },
+      },
     },
     consentAcceptedAt: { type: Date },
     configVersion:     { type: Number, default: 1 },

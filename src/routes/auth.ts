@@ -286,10 +286,11 @@ authRouter.patch('/me', authenticate, validate(UpdateProfileSchema), async (req:
       user.gender = gender;
     }
     if (preferences) {
-      user.preferences = {
-        ...user.preferences,
-        ...preferences,
-      };
+      // Set only the fields sent. Re-assigning a spread of the whole object would write
+      // `undefined` into nested paths the member never set (e.g. aiVoice), which Mongoose rejects.
+      for (const [key, value] of Object.entries(preferences)) {
+        if (value !== undefined) user.set(`preferences.${key}`, value);
+      }
     }
 
     await user.save();

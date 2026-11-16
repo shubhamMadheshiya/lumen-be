@@ -7,6 +7,8 @@ export interface IAiWeeklyReportDoc extends Document {
   weekStart: string;
   weekEnd: string;
   text: string;
+  provider?: 'gemini' | 'claude';
+  llmModel?: string;
   createdAt: Date;
 }
 
@@ -16,6 +18,8 @@ const AiWeeklyReportSchema = new Schema<IAiWeeklyReportDoc>(
     weekStart: { type: String, required: true },
     weekEnd: { type: String, required: true },
     text: { type: String, required: true, maxlength: 20000 },
+    provider: { type: String, enum: ['gemini', 'claude'] },
+    llmModel: { type: String },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );

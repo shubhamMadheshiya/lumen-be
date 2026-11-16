@@ -59,13 +59,13 @@ export async function generateWeeklyReview(
   }
 
   const result = await runAssistant({
-    userId, history: [], message: reviewPrompt(week.weekStart, week.weekEnd), budgetMs: REVIEW_BUDGET_MS,
+    userId, history: [], message: reviewPrompt(week.weekStart, week.weekEnd), budgetMs: REVIEW_BUDGET_MS, effort: 'high',
   });
   if (result.error) return { report: null, error: result.error };
 
   const report = await AiWeeklyReport.findOneAndUpdate(
     { userId: uid, weekStart: week.weekStart },
-    { $set: { weekEnd: week.weekEnd, text: result.text } },
+    { $set: { weekEnd: week.weekEnd, text: result.text, provider: result.provider, llmModel: result.model } },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
   return { report };

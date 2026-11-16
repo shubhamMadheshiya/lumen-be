@@ -1,13 +1,12 @@
 /**
  * Lumen AI's read tools: the member's OWN data, all of it, including free-text notes and photos.
- * Gemini decides which to call (function calling), so a question only pulls what it needs.
+ * The model (Gemini or Claude) decides which to call, so a question only pulls what it needs.
  *
  * Every handler filters by the member's userId — there is no way to name another member's data.
  * Community chat is deliberately absent: it holds other people's messages. Raw GPS routes are left
  * out (no analytic value, lots of tokens). Results are capped so a tool reply stays small.
  */
 import mongoose from 'mongoose';
-import { SchemaType, type FunctionDeclaration } from '@google/generative-ai';
 import { LogEntry } from '../../../models/LogEntry';
 import { Category } from '../../../models/Category';
 import { Note, type INoteBlockDoc } from '../../../models/Note';
@@ -147,13 +146,27 @@ function flattenBlocks(blocks: INoteBlockDoc[] = []): string {
 
 // ── Declarations ─────────────────────────────────────────────────────────────
 
-const S = SchemaType;
+/** Plain JSON Schema, shared by both providers (each converts it to its own tool format). */
+export interface ToolSchema {
+  type: 'object' | 'string' | 'integer' | 'number' | 'boolean' | 'array';
+  description?: string;
+  properties?: Record<string, ToolSchema>;
+  required?: string[];
+  items?: ToolSchema;
+}
+export interface ToolDeclaration {
+  name: string;
+  description: string;
+  parameters?: ToolSchema;
+}
+
+const S = { OBJECT: 'object', STRING: 'string', INTEGER: 'integer', BOOLEAN: 'boolean' } as const;
 const dateRange = {
   from: { type: S.STRING, description: 'First Lumen day, YYYY-MM-DD. Defaults to 30 days before `to`.' },
   to: { type: S.STRING, description: 'Last Lumen day, YYYY-MM-DD. Defaults to today.' },
 } as const;
 
-export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
+export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: 'list_categories',
     description: "The member's own tracking categories (e.g. Symptoms, Food & Drink, Vitals) with their role. Call first if unsure what a category is called.",

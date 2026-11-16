@@ -5,6 +5,10 @@ export interface IAiMessage {
   text: string;
   mediaIds: string[];
   createdAt: Date;
+  /** Assistant replies: which provider/model wrote it, and the tokens it used (for the cost estimate). */
+  provider?: 'gemini' | 'claude';
+  llmModel?: string;
+  usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
 }
 
 /** One Lumen AI chat thread. Only the member who owns it can read it. */
@@ -24,6 +28,14 @@ const AiMessageSchema = new Schema<IAiMessage>(
     text: { type: String, default: '', maxlength: 20000 },
     mediaIds: [{ type: String }],
     createdAt: { type: Date, default: Date.now },
+    provider: { type: String, enum: ['gemini', 'claude'] },
+    llmModel: { type: String },
+    usage: {
+      inputTokens: { type: Number },
+      outputTokens: { type: Number },
+      cacheReadTokens: { type: Number },
+      cacheWriteTokens: { type: Number },
+    },
   },
   { _id: true },
 );

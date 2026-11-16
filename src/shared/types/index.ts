@@ -472,6 +472,10 @@ export interface UserPreferences {
   aiFullAccess?: boolean; // Lumen AI may read all own data (set via POST /ai/access)
   aiPhotoAccess?: boolean; // ...including photos, sensitive ones too
   aiFreeTierAcknowledgedAt?: string;
+  aiProvider?: 'gemini' | 'claude'; // set via PATCH /ai/settings
+  aiModel?: string;
+  aiClaudeAcknowledgedAt?: string;
+  aiVoice?: { ttsVoice?: string; natural?: boolean; sttLang?: 'en-IN' | 'hi-IN' };
 }
 
 export interface IUser {

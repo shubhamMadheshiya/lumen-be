@@ -53,6 +53,18 @@ export const config = {
      * measured on 2026-11-13) run out of time, while flash-lite answers in ~5-10 s.
      */
     assistantModel: optional('GEMINI_ASSISTANT_MODEL', 'gemini-3.1-flash-lite'),
+    /**
+     * Lumen AI's spoken replies, tried in order. On the free tier each TTS model has its own small
+     * daily quota (gemini-3.8-flash-lite-tts: 10 requests/day, seen 2026-11-16), so when one says
+     * 429 the next one is used until the first one's quota resets.
+     */
+    ttsModels: optional('GEMINI_TTS_MODELS', 'gemini-3.8-flash-lite-tts,gemini-3.8-flash-tts,gemini-3.1-flash-tts-preview,gemini-2.5-flash-preview-tts')
+      .split(',').map(s => s.trim()).filter(Boolean),
+  },
+
+  /** Optional second provider for Lumen AI (paid per use). Without a key Claude shows as "not set up". */
+  anthropic: {
+    apiKey: optional('ANTHROPIC_API_KEY'),
   },
 
   isDev: optional('NODE_ENV', 'development') === 'development',

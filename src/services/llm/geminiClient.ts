@@ -74,8 +74,8 @@ export async function generateSentences(systemPrompt: string, userPrompt: string
 // ── Lumen AI (assistant) ─────────────────────────────────────────────────────
 
 export type TurnResult =
-  | { ok: true; parts: Part[]; functionCalls: FunctionCall[]; text: string }
-  | { ok: false; error: 'not_configured' | 'rate_limited' | 'busy' | 'blocked' | 'timeout' | 'failed'; detail?: string };
+  | { ok: true; parts: Part[]; functionCalls: FunctionCall[]; text: string; usage?: { inputTokens: number; outputTokens: number } }
+  | { ok: false; error: 'not_configured' | 'bad_key' | 'rate_limited' | 'busy' | 'blocked' | 'timeout' | 'failed'; detail?: string };
 
 /**
  * One model turn for the assistant: free text plus optional function calls. Unlike the narration
@@ -87,12 +87,14 @@ export async function generateTurn(opts: {
   tools?: FunctionDeclaration[];
   timeoutMs: number;
   maxOutputTokens?: number;
+  /** Defaults to GEMINI_ASSISTANT_MODEL; the member can pick another in the app. */
+  model?: string;
 }): Promise<TurnResult> {
   const genAI = getClient();
   if (!genAI) return { ok: false, error: 'not_configured' };
   try {
     const model = genAI.getGenerativeModel({
-      model: config.gemini.assistantModel,
+      model: opts.model ?? config.gemini.assistantModel,
       systemInstruction: opts.systemPrompt,
       ...(opts.tools?.length ? { tools: [{ functionDeclarations: opts.tools }] } : {}),
       generationConfig: { temperature: 0.4, maxOutputTokens: opts.maxOutputTokens ?? 2048 },
@@ -111,10 +113,14 @@ export async function generateTurn(opts: {
       .map(p => p.text ?? '')
       .join('')
       .trim();
-    return { ok: true, parts, functionCalls, text };
+    const meta = response.usageMetadata;
+    const usage = meta ? { inputTokens: meta.promptTokenCount ?? 0, outputTokens: (meta.candidatesTokenCount ?? 0) + ((meta as { thoughtsTokenCount?: number }).thoughtsTokenCount ?? 0) } : undefined;
+    return { ok: true, parts, functionCalls, text, usage };
   } catch (err) {
     const e = err as { status?: number; name?: string; message?: string };
     if (e.status === 429) return { ok: false, error: 'rate_limited', detail: e.message };
+    // An invalid key comes back as 400 'API key not valid' (or 401/403).
+    if (e.status === 401 || e.status === 403 || (e.status === 400 && /api key/i.test(e.message ?? ''))) return { ok: false, error: 'bad_key', detail: e.message };
     // 503 'model is experiencing high demand' (seen live on the free tier) and 500s are Google-side and usually pass.
     if (e.status === 503 || e.status === 500) return { ok: false, error: 'busy', detail: e.message };
     if (e.name === 'AbortError' || /aborted|timeout/i.test(e.message ?? '')) return { ok: false, error: 'timeout' };
