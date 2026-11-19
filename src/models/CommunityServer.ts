@@ -11,6 +11,7 @@ export interface ICommunityServerDoc extends Document {
   inviteCode: string;
   ownerId: mongoose.Types.ObjectId;
   memberIds: mongoose.Types.ObjectId[];
+  modIds: mongoose.Types.ObjectId[];
   membersCount: number;
   isOfficial: boolean;
   createdAt: Date;
@@ -29,6 +30,7 @@ const CommunityServerSchema = new Schema<ICommunityServerDoc>(
     inviteCode: { type: String, required: true, unique: true, index: true },
     ownerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     memberIds: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    modIds: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     membersCount: { type: Number, default: 1 },
     isOfficial: { type: Boolean, default: false },
   },

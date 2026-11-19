@@ -997,3 +997,16 @@ export interface IHealthRecord {
 }
 
 
+
+// ── Lumen AI chat attachments ────────────────────────────────────────────────
+
+/** What a Lumen AI chat attachment can point at (see server services/llm/assistant/refTypes.ts). */
+export type AiChatRefKind = 'day' | 'note' | 'task' | 'list' | 'medication' | 'record' | 'flare' | 'experiment' | 'pattern' | 'weekly_report' | 'file';
+
+export interface IAiChatRef {
+  kind: AiChatRefKind;
+  /** YYYY-MM-DD for a day, `exposureKey|outcomeKey|lagDays` for a pattern, otherwise an id (a Media id for a file). */
+  id: string;
+  /** The chip label. */
+  title: string;
+}

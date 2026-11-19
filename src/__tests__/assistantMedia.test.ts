@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import sharp from 'sharp';
 import { Media } from '../models/Media';
-import { getPhotoForAi, setFetchBytesForTesting } from '../services/llm/assistant/mediaBytes';
+import { getFileForAi, getPhotoForAi, MAX_FILE_BYTES, setFetchBytesForTesting } from '../services/llm/assistant/mediaBytes';
 
 jest.mock('../models/Media', () => ({ Media: { findOne: jest.fn() } }));
 
@@ -43,5 +43,28 @@ describe('getPhotoForAi', () => {
   it('reports an unreadable file instead of throwing', async () => {
     fetchBytes.mockRejectedValue(new Error('S3 down'));
     await expect(getPhotoForAi(ME, id, true)).resolves.toEqual({ ok: false, reason: 'unreadable' });
+  });
+});
+
+describe('getFileForAi (a PDF the member attached in chat)', () => {
+  const pdf = { _id: id, storageKey: `users/${ME}/x.pdf`, mimeType: 'application/pdf', size: 1000, sensitive: true, createdAt: new Date('2026-11-01') };
+
+  it('returns the PDF as-is, looked up by id and owner, without needing photo access', async () => {
+    (Media.findOne as jest.Mock).mockReturnValue({ lean: async () => pdf });
+    fetchBytes.mockResolvedValue(Buffer.from('%PDF-1.7'));
+    const res = await getFileForAi(ME, id);
+    expect(res).toEqual({ ok: true, file: { mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.7').toString('base64'), takenAt: pdf.createdAt, sensitive: true } });
+    expect(Media.findOne).toHaveBeenCalledWith({ _id: id, userId: ME });
+  });
+
+  it('refuses images, missing files and files over 10 MB', async () => {
+    await expect(getFileForAi(ME, id)).resolves.toEqual({ ok: false, reason: 'not_a_pdf' });
+    (Media.findOne as jest.Mock).mockReturnValue({ lean: async () => null });
+    await expect(getFileForAi(ME, id)).resolves.toEqual({ ok: false, reason: 'not_found' });
+    (Media.findOne as jest.Mock).mockReturnValue({ lean: async () => ({ ...pdf, size: MAX_FILE_BYTES + 1 }) });
+    await expect(getFileForAi(ME, id)).resolves.toEqual({ ok: false, reason: 'too_large' });
+    (Media.findOne as jest.Mock).mockReturnValue({ lean: async () => ({ ...pdf, size: 0 }) });
+    fetchBytes.mockResolvedValue(Buffer.alloc(MAX_FILE_BYTES + 1));
+    await expect(getFileForAi(ME, id)).resolves.toEqual({ ok: false, reason: 'too_large' });
   });
 });

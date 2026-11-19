@@ -11,6 +11,11 @@ export interface ICommunityChannelDoc extends Document {
   category: string;
   type: 'text' | 'forum' | 'announcement' | 'dm';
   dmMemberIds?: mongoose.Types.ObjectId[];
+  /** Who started the DM; a DM from a stranger stays a request until the other person accepts. */
+  dmInitiatorId?: mongoose.Types.ObjectId;
+  dmStatus?: 'pending' | 'accepted' | 'declined';
+  /** Seconds a regular member must wait between messages (0 = off). */
+  slowModeSeconds?: number;
   order: number;
   memberCount: number;
   messageCount: number;
@@ -31,6 +36,9 @@ const CommunityChannelSchema = new Schema<ICommunityChannelDoc>(
     category: { type: String, default: 'CONDITION HUBS', index: true },
     type: { type: String, enum: ['text', 'forum', 'announcement', 'dm'], default: 'text' },
     dmMemberIds: [{ type: Schema.Types.ObjectId, ref: 'User', index: true }],
+    dmInitiatorId: { type: Schema.Types.ObjectId, ref: 'User' },
+    dmStatus: { type: String, enum: ['pending', 'accepted', 'declined'] },
+    slowModeSeconds: { type: Number, default: 0, min: 0, max: 21600 },
     order: { type: Number, default: 0 },
     memberCount: { type: Number, default: 0 },
     messageCount: { type: Number, default: 0 },

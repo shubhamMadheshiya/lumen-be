@@ -61,39 +61,46 @@ export function initSocketService(httpServer: http.Server): SocketIOServer {
       socket.join(`user:${userId}`);
     }
 
-    // Join / Leave channel room
-    socket.on('join_channel', (data: { channelId: string }) => {
-      if (data?.channelId) {
-        socket.join(`channel:${data.channelId}`);
+    // Rooms are keyed by the channel's real id. Clients may name a channel by slug, so resolve it first,
+    // and only let a signed-in member who may see the channel in.
+    const resolveAllowed = async (raw: unknown): Promise<string | null> => {
+      if (!userId || typeof raw !== 'string' || !raw) return null;
+      try {
+        const { loadChannel, canAccessChannel } = await import('../routes/communityChat');
+        const channel = await loadChannel(raw);
+        if (!channel || !(await canAccessChannel(userId, channel))) return null;
+        return String(channel._id);
+      } catch {
+        return null;
       }
+    };
+
+    socket.on('join_channel', async (data: { channelId: string }) => {
+      const id = await resolveAllowed(data?.channelId);
+      if (id) socket.join(`channel:${id}`);
     });
 
-    socket.on('leave_channel', (data: { channelId: string }) => {
-      if (data?.channelId) {
-        socket.leave(`channel:${data.channelId}`);
-      }
+    socket.on('leave_channel', async (data: { channelId: string }) => {
+      const id = await resolveAllowed(data?.channelId);
+      if (id) socket.leave(`channel:${id}`);
     });
 
-    // Live typing indicator
-    socket.on('typing_start', (data: { channelId: string; displayName?: string }) => {
-      if (data?.channelId) {
-        socket.to(`channel:${data.channelId}`).emit('user_typing', {
-          channelId: data.channelId,
-          userId: userId || 'anon',
-          displayName: data.displayName || 'Someone',
-          isTyping: true,
-        });
-      }
+    // Live typing indicator (only for rooms this socket has actually joined)
+    socket.on('typing_start', async (data: { channelId: string; displayName?: string }) => {
+      const id = await resolveAllowed(data?.channelId);
+      if (!id || !socket.rooms.has(`channel:${id}`)) return;
+      socket.to(`channel:${id}`).emit('user_typing', {
+        channelId: id,
+        userId: userId!,
+        displayName: String(data.displayName || 'Someone').slice(0, 40),
+        isTyping: true,
+      });
     });
 
-    socket.on('typing_stop', (data: { channelId: string }) => {
-      if (data?.channelId) {
-        socket.to(`channel:${data.channelId}`).emit('user_typing', {
-          channelId: data.channelId,
-          userId: userId || 'anon',
-          isTyping: false,
-        });
-      }
+    socket.on('typing_stop', async (data: { channelId: string }) => {
+      const id = await resolveAllowed(data?.channelId);
+      if (!id || !socket.rooms.has(`channel:${id}`)) return;
+      socket.to(`channel:${id}`).emit('user_typing', { channelId: id, userId: userId!, isTyping: false });
     });
 
     socket.on('disconnect', () => {

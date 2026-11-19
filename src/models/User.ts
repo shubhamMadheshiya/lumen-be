@@ -34,6 +34,12 @@ export interface IUserDoc extends Document {
     aiVoice?: { ttsVoice?: string; natural?: boolean; sttLang?: 'en-IN' | 'hi-IN' };
     /** Lumen AI daily health journal (default on while full access is on), and its note. */
     aiJournal?: boolean;
+    /** Short status shown on the member's community profile (e.g. low spoons today). */
+    communityStatus?: string;
+    /** False when the member muted community push notifications. */
+    communityPush?: boolean;
+    /** Quiet hours (22:00 to 08:00 local) for community push. */
+    communityQuiet?: boolean;
     aiJournalNoteId?: string;
   };
   consentAcceptedAt?: Date;
@@ -73,6 +79,9 @@ const UserSchema = new Schema<IUserDoc>(
         sttLang:  { type: String, enum: ['en-IN', 'hi-IN'], default: 'en-IN' },
       },
       aiJournal:       { type: Boolean },
+      communityStatus: { type: String, maxlength: 60 },
+      communityPush:   { type: Boolean },
+      communityQuiet:  { type: Boolean },
       aiJournalNoteId: { type: String },
     },
     consentAcceptedAt: { type: Date },

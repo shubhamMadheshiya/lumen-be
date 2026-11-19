@@ -15,6 +15,7 @@ export interface ICommunityMessageDoc extends Document {
   senderRoleBadges?: string[];
   isAnonymous: boolean;
   content: string;
+  contentWarning?: string;
   isEdited?: boolean;
   editedAt?: Date;
   isPinned?: boolean;
@@ -25,6 +26,7 @@ export interface ICommunityMessageDoc extends Document {
   };
   mentions?: string[];
   audioUrl?: string;
+  audioMediaId?: mongoose.Types.ObjectId;
   audioDurationSeconds?: number;
   replyTo?: {
     messageId: mongoose.Types.ObjectId;
@@ -60,6 +62,7 @@ const CommunityMessageSchema = new Schema<ICommunityMessageDoc>(
     senderRoleBadges: { type: [String], default: [] },
     isAnonymous: { type: Boolean, default: false },
     content: { type: String, maxlength: 3000, default: '' },
+    contentWarning: { type: String, maxlength: 60 },
     isEdited: { type: Boolean, default: false },
     editedAt: { type: Date },
     isPinned: { type: Boolean, default: false, index: true },
@@ -70,6 +73,7 @@ const CommunityMessageSchema = new Schema<ICommunityMessageDoc>(
     },
     mentions: { type: [String], default: [] },
     audioUrl: { type: String },
+    audioMediaId: { type: Schema.Types.ObjectId, ref: 'Media' },
     audioDurationSeconds: { type: Number },
     replyTo: {
       messageId: { type: Schema.Types.ObjectId, ref: 'CommunityMessage' },

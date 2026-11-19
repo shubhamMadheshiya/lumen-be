@@ -26,6 +26,8 @@ import { classifyTrend, goodBadDays, regimeShifts, weeklyMedians } from '../../i
 import { presentFindings, presentProgress } from '../../insightPresenter';
 import { shiftDayKey, trackingDayKey } from '../../../utils/dayKey';
 import { getPhotoForAi, type PhotoForAi } from './mediaBytes';
+import { clipJson, MAX_REF_CHARS, refFailureText, resolveRef } from './attachments';
+import { REF_KINDS, type RefKind } from './refTypes';
 
 export interface ToolContext {
   userId: string;
@@ -142,7 +144,7 @@ async function loadEntries(ctx: ToolContext, from: string, to: string, extra: Re
   });
 }
 
-function flattenBlocks(blocks: INoteBlockDoc[] = []): string {
+export function flattenBlocks(blocks: INoteBlockDoc[] = []): string {
   const out: string[] = [];
   const walk = (bs: INoteBlockDoc[]) => bs.forEach(b => {
     if (b.content) out.push(b.type === 'todo' ? `[${b.completed ? 'x' : ' '}] ${b.content}` : b.content);
@@ -223,7 +225,7 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: 'get_health_records',
     description: 'Lab results with biomarker values, prescriptions, imaging and doctor notes. Includes photo/file ids of the documents.',
-    parameters: { type: S.OBJECT, properties: { type: { type: S.STRING, description: 'blood_test, prescription, imaging or doctor_note' } } },
+    parameters: { type: S.OBJECT, properties: { type: { type: S.STRING, description: 'blood_test, doctor_prescription, imaging or doctor_note' } } },
   },
   { name: 'get_sleep', description: 'Wake time, bedtime and hours slept per day.', parameters: { type: S.OBJECT, properties: dateRange } },
   { name: 'get_activity', description: 'Daily steps and every walk/exercise session (duration, distance, steps, notes).', parameters: { type: S.OBJECT, properties: dateRange } },
@@ -248,6 +250,15 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     name: 'view_photo',
     description: 'Look at one photo by its id. The image is attached to the reply so you can describe and analyse it. View at most 4 per answer.',
     parameters: { type: S.OBJECT, properties: { mediaId: { type: S.STRING } }, required: ['mediaId'] },
+  },
+  {
+    name: 'open_attachment',
+    description: 'Re-read something the member attached earlier in this chat (the history shows it as [kind:id]). Kinds: day, note, task, list, medication, record, flare, experiment, pattern, weekly_report, file.',
+    parameters: {
+      type: S.OBJECT,
+      properties: { kind: { type: S.STRING, description: 'The kind before the colon, e.g. note.' }, id: { type: S.STRING, description: 'The id after the colon.' } },
+      required: ['kind', 'id'],
+    },
   },
 ];
 
@@ -353,7 +364,7 @@ const handlers: Record<string, Handler> = {
     return {
       response: {
         tasks: tasks.map(t => ({
-          title: t.title, notes: clip(t.notes, 600), done: t.isCompleted, due: t.dueDate,
+          id: String(t._id), title: t.title, notes: clip(t.notes, 600), done: t.isCompleted, due: t.dueDate,
           energyCost: t.energyCost, important: t.isImportant, steps: t.steps?.map(s => `${s.completed ? '[x]' : '[ ]'} ${s.title}`),
         })),
       },
@@ -365,7 +376,7 @@ const handlers: Record<string, Handler> = {
     return {
       response: {
         medications: meds.map(m => ({
-          name: m.name, dose: m.dose, unit: m.unit, schedule: m.schedule, active: m.active,
+          id: String(m._id), name: m.name, dose: m.dose, unit: m.unit, schedule: m.schedule, active: m.active,
           startedOn: m.startedOn, stoppedOn: m.stoppedOn,
           changes: (m.changes ?? []).map(c => ({ at: c.at, kind: c.kind, note: clip(c.note) })),
         })),
@@ -380,7 +391,7 @@ const handlers: Record<string, Handler> = {
     return {
       response: {
         records: recs.map(r => ({
-          title: r.title, type: r.type, date: r.date, doctor: r.doctorName, clinic: r.clinicOrLab,
+          id: String(r._id), title: r.title, type: r.type, date: r.date, doctor: r.doctorName, clinic: r.clinicOrLab,
           notes: clip(r.notes, 1500), biomarkers: r.biomarkers, medications: r.medications,
           documentIds: (r.mediaIds ?? []).map(String),
         })),
@@ -425,7 +436,7 @@ const handlers: Record<string, Handler> = {
 
   async get_flares(ctx) {
     const flares = await FlareEpisode.find({ userId: oid(ctx.userId) }).sort({ startDay: -1 }).limit(100).lean();
-    return { response: { flares: flares.map(f => ({ start: f.startDay, end: f.endDay, source: f.source, confirmed: f.confirmed })) } };
+    return { response: { flares: flares.map(f => ({ id: String(f._id), start: f.startDay, end: f.endDay, source: f.source, confirmed: f.confirmed })) } };
   },
 
   async get_patterns(ctx) {
@@ -451,7 +462,7 @@ const handlers: Record<string, Handler> = {
     const exps = await Experiment.find({ userId: oid(ctx.userId) }).sort({ createdAt: -1 }).limit(20).lean();
     return {
       response: {
-        experiments: exps.map(e => ({ testing: e.exposureLabel, outcome: e.outcomeLabel, startDay: e.startDay, status: e.status, medicine: e.isMedicineRelated })),
+        experiments: exps.map(e => ({ id: String(e._id), testing: e.exposureLabel, outcome: e.outcomeLabel, startDay: e.startDay, status: e.status, medicine: e.isMedicineRelated })),
       },
     };
   },
@@ -499,6 +510,18 @@ const handlers: Record<string, Handler> = {
     return {
       response: { ok: true, mediaId, takenAt: res.photo.takenAt, sensitive: res.photo.sensitive, note: 'The image is attached below.' },
       images: [{ ...res.photo, mediaId }],
+    };
+  },
+
+  async open_attachment(ctx, args) {
+    const kind = String(args.kind ?? '') as RefKind;
+    const id = String(args.id ?? '');
+    if (!(REF_KINDS as readonly string[]).includes(kind)) return { response: { ok: false, reason: `Unknown kind "${kind}".` } };
+    const res = await resolveRef(ctx, { kind, id });
+    if (!res.ok) return { response: { ok: false, reason: `It could not be opened: ${refFailureText(res.reason)}.` } };
+    return {
+      response: { ok: true, kind, id, data: clipJson(res.data, MAX_REF_CHARS), ...(res.files.length ? { note: 'Its files are attached below.' } : {}) },
+      ...(res.files.length ? { images: res.files.map(({ label: _label, ...f }) => f) } : {}),
     };
   },
 };

@@ -19,6 +19,7 @@ export interface IForumPostDoc extends Document {
     senderRoleBadges?: string[];
   };
   content: string;
+  contentWarning?: string;
   embedType?: CommunityEmbedType;
   embedData?: {
     note?: INoteEmbedPayload;
@@ -49,6 +50,7 @@ const ForumPostSchema = new Schema<IForumPostDoc>(
       senderRoleBadges: { type: [String], default: [] },
     },
     content: { type: String, required: true, maxlength: 10000 },
+    contentWarning: { type: String, maxlength: 60 },
     embedType: {
       type: String,
       enum: ['note', 'todo_list', 'log_template', 'photo'],

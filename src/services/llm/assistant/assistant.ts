@@ -15,6 +15,8 @@ import { classifyQuestion } from '../router';
 import { runTool, TOOL_DECLARATIONS, type AssistantArtifact, type ToolContext } from './dataTools';
 import { runWriteTool, WRITE_TOOL_DECLARATIONS, WRITE_TOOL_NAMES, WRITING_TOOLS } from './writeTools';
 import { getPhotoForAi } from './mediaBytes';
+import { clipJson, MAX_REF_CHARS, MAX_REFS_TOTAL_CHARS, refFailureText, refLabel, resolveRef } from './attachments';
+import type { ChatRef } from './refTypes';
 import { resolveModel, type AiModelInfo } from './models';
 import { getProvider } from './providers';
 import type { AssistantError, Effort, InputPart, ToolResultInput, Usage } from './providers/types';
@@ -36,6 +38,39 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
   mediaIds?: string[];
+  refs?: ChatRef[];
+}
+
+/** How an earlier message's attachments appear in history: ids only, the model can re-open them. */
+export function historyText(m: ChatMessage): string {
+  const parts = [m.text];
+  if (m.mediaIds?.length) parts.push(`(attached photo ids: ${m.mediaIds.join(', ')})`);
+  if (m.refs?.length) parts.push(`(attached: ${m.refs.map(refLabel).join('; ')} — use open_attachment to read one again)`);
+  return parts.filter(Boolean).join('\n') || '(attachment)';
+}
+
+/**
+ * The member's attachments as parts of their message, in order: each one's label and data, then
+ * any files (PDFs, a health record's documents) right after their own label.
+ */
+export async function attachmentParts(ctx: ToolContext, refs: ChatRef[]): Promise<InputPart[]> {
+  const parts: InputPart[] = [];
+  let budget = MAX_REFS_TOTAL_CHARS;
+  for (const ref of refs) {
+    const res = await resolveRef(ctx, ref);
+    if (!res.ok) {
+      parts.push({ type: 'text', text: `(Attached ${refLabel(ref)} could not be read: ${refFailureText(res.reason)}.)` });
+      continue;
+    }
+    const json = clipJson(res.data, Math.max(500, Math.min(MAX_REF_CHARS, budget)));
+    budget -= json.length;
+    parts.push({ type: 'text', text: `Attached ${refLabel(ref)}:\n${json}` });
+    for (const f of res.files) {
+      if (f.label) parts.push({ type: 'text', text: f.label });
+      parts.push({ type: 'image', mimeType: f.mimeType, base64: f.base64 });
+    }
+  }
+  return parts;
 }
 
 export interface AssistantResult {
@@ -153,6 +188,8 @@ export async function runAssistant(opts: {
   history: ChatMessage[];
   message: string;
   mediaIds?: string[];
+  /** Lumen items and PDFs the member attached to this message. */
+  refs?: ChatRef[];
   /** Overrides the model's time budget (the weekly review runs in the background and can take longer). */
   budgetMs?: number;
   /** The reply will be spoken: short, no markdown. */
@@ -174,7 +211,9 @@ export async function runAssistant(opts: {
   const budget = Math.max(opts.budgetMs ?? 0, model.budgetMs);
 
   // The member's own attachments go in with the question.
-  const userParts: InputPart[] = [{ type: 'text', text: opts.message || 'Please look at this photo.' }];
+  const refs = opts.refs ?? [];
+  const defaultQuestion = refs.length ? 'Please look at what I attached.' : 'Please look at this photo.';
+  const userParts: InputPart[] = [{ type: 'text', text: opts.message || defaultQuestion }];
   for (const id of (opts.mediaIds ?? []).slice(0, MAX_IMAGES_PER_ANSWER)) {
     const res = await getPhotoForAi(ctx.userId, id, ctx.photoAccess);
     if (res.ok) {
@@ -184,14 +223,12 @@ export async function runAssistant(opts: {
       userParts.push({ type: 'text', text: `(Attached photo ${id} could not be shown: ${res.reason === 'photo_access_off' ? 'photo access is turned off in Settings' : res.reason}.)` });
     }
   }
+  if (refs.length) userParts.push(...await attachmentParts(ctx, refs));
 
   const session = getProvider(model.provider).startSession({
     model: model.id,
     system: systemPrompt(ctx, built.name, built.conditions, !!opts.voice, allowWrites),
-    history: withUserFirst(opts.history.slice(-HISTORY_MESSAGES).map(m => ({
-      role: m.role,
-      text: m.mediaIds?.length ? `${m.text}\n(attached photo ids: ${m.mediaIds.join(', ')})` : m.text || '(photo)',
-    }))),
+    history: withUserFirst(opts.history.slice(-HISTORY_MESSAGES).map(m => ({ role: m.role, text: historyText(m) }))),
     userParts,
     tools,
     effort: opts.effort ?? (opts.voice ? 'low' : 'medium'),
@@ -244,9 +281,12 @@ export async function runAssistant(opts: {
           ? await runWriteTool(ctx, call.name, call.args)
           : { response: { ok: false, error: 'Creating notes or templates is not available here.' } };
       if (result.artifact && !artifacts.some(a => a.id === result.artifact!.id)) artifacts.push(result.artifact);
-      const images = (result.images ?? []).map(img => {
+      // open_attachment can bring files too; together they stay within the per-answer cap.
+      const room = Math.max(0, MAX_IMAGES_PER_ANSWER - imagesShown);
+      const images = (result.images ?? []).slice(0, room).map(img => {
         imagesShown++;
-        return { label: `Photo ${img.mediaId} (taken ${img.takenAt.toISOString().slice(0, 10)}):`, mimeType: img.mimeType, base64: img.base64 };
+        const what = img.mimeType === 'application/pdf' ? 'Document' : 'Photo';
+        return { label: `${what} ${img.mediaId} (taken ${img.takenAt.toISOString().slice(0, 10)}):`, mimeType: img.mimeType, base64: img.base64 };
       });
       results.push({ id: call.id, name: call.name, response: result.response as Record<string, unknown>, images });
     }

@@ -1,9 +1,12 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { REF_KINDS, type ChatRef } from '../services/llm/assistant/refTypes';
 
 export interface IAiMessage {
   role: 'user' | 'assistant';
   text: string;
   mediaIds: string[];
+  /** Member messages: Lumen items and PDFs attached to it (a day, a note, a lab report...). */
+  refs?: ChatRef[];
   createdAt: Date;
   /** Assistant replies: which provider/model wrote it, and the tokens it used (for the cost estimate). */
   provider?: 'gemini' | 'claude';
@@ -29,6 +32,10 @@ const AiMessageSchema = new Schema<IAiMessage>(
     role: { type: String, enum: ['user', 'assistant'], required: true },
     text: { type: String, default: '', maxlength: 20000 },
     mediaIds: [{ type: String }],
+    refs: {
+      type: [new Schema({ kind: { type: String, enum: REF_KINDS, required: true }, id: { type: String, required: true }, title: { type: String, maxlength: 200 } }, { _id: false })],
+      default: undefined,
+    },
     createdAt: { type: Date, default: Date.now },
     provider: { type: String, enum: ['gemini', 'claude'] },
     llmModel: { type: String },

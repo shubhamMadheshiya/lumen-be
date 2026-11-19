@@ -586,12 +586,14 @@ export const LogTemplateEmbedPayloadSchema = z.object({
 export const CreateCommunityMessageSchema = z.object({
   channelId: z.string().min(1),
   content: z.string().max(3000).default(''),
+  contentWarning: z.string().trim().max(60).optional(),
   isAnonymous: z.boolean().default(false),
   senderAvatarEmoji: z.string().max(30).optional(),
   senderRoleColor: z.string().optional(),
   senderRoleBadges: z.array(z.string()).optional(),
   mentions: z.array(z.string()).optional(),
   audioUrl: z.string().optional(),
+  audioMediaId: z.string().optional(),
   audioDurationSeconds: z.number().optional(),
   replyTo: z.object({
     messageId: z.string(),
@@ -604,6 +606,7 @@ export const CreateCommunityMessageSchema = z.object({
     todo: TodoEmbedPayloadSchema.optional(),
     logTemplate: LogTemplateEmbedPayloadSchema.optional(),
     photoUrl: z.string().optional(),
+    photoMediaId: z.string().optional(),
     caption: z.string().max(500).optional(),
   }).optional(),
 });
@@ -639,6 +642,7 @@ export const CreateForumPostSchema = z.object({
   title: z.string().min(3).max(200),
   tags: z.array(z.string()).default([]),
   content: z.string().min(1).max(10000),
+  contentWarning: z.string().trim().max(60).optional(),
   isAnonymous: z.boolean().default(false),
   senderAvatarEmoji: z.string().optional(),
   embedType: CommunityEmbedTypeEnum.optional(),
@@ -647,6 +651,7 @@ export const CreateForumPostSchema = z.object({
     todo: TodoEmbedPayloadSchema.optional(),
     logTemplate: LogTemplateEmbedPayloadSchema.optional(),
     photoUrl: z.string().optional(),
+    photoMediaId: z.string().optional(),
   }).optional(),
 });
 
@@ -670,6 +675,38 @@ export const CreateCommunityServerSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#38BDF8'),
   conditionTags: z.array(z.string()).min(1).max(10),
   isPrivate: z.boolean().default(false),
+});
+
+export const UpdateCommunityServerSchema = z.object({
+  name: z.string().min(3).max(100).optional(),
+  description: z.string().max(500).optional(),
+  icon: z.string().min(1).max(20).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+}).refine(v => Object.keys(v).length > 0, { message: 'Nothing to update' });
+
+export const CommunitySettingsSchema = z.object({
+  /** Empty string clears the status. */
+  status: z.string().trim().max(60).optional(),
+  push: z.boolean().optional(),
+  quiet: z.boolean().optional(),
+}).refine(v => Object.keys(v).length > 0, { message: 'Nothing to update' });
+
+export const ChannelSettingsSchema = z.object({
+  slowModeSeconds: z.number().int().min(0).max(21600),
+});
+
+export const TranslateMessageSchema = z.object({
+  target: z.enum(['english', 'hinglish']),
+});
+
+export const ReportMessageSchema = z.object({
+  reason: z.enum(['spam', 'harassment', 'harmful_advice', 'other']),
+  note: z.string().max(300).optional(),
+});
+
+export const SetModeratorSchema = z.object({
+  userId: z.string().min(1),
+  isMod: z.boolean(),
 });
 
 export const JoinCommunityServerSchema = z.object({

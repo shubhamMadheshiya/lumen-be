@@ -25,6 +25,8 @@ import { AiTemplateDraft } from '../models/AiTemplateDraft';
 import { createAiNote } from '../services/notes/aiNoteWriter';
 import { createDoctorVisitNote, NOTE_ACTIONS, runNoteAction } from '../services/notes/aiNoteActions';
 import { applyDraft, DraftError, draftPayload, undoDraft } from '../services/templates/aiTemplateDraft';
+import { MAX_FILE_REFS, MAX_REFS, REF_KINDS, type ChatRef } from '../services/llm/assistant/refTypes';
+import { listAttachables, ATTACHABLE_KINDS } from '../services/llm/assistant/attachables';
 
 export const aiRouter = Router();
 aiRouter.use(authenticate);
@@ -103,7 +105,7 @@ function full(c: IAiConversationDoc) {
     ...summary(c),
     messages: c.messages.map(m => ({
       id: String((m as unknown as { _id: unknown })._id),
-      role: m.role, text: m.text, mediaIds: m.mediaIds ?? [], createdAt: m.createdAt,
+      role: m.role, text: m.text, mediaIds: m.mediaIds ?? [], refs: m.refs ?? [], createdAt: m.createdAt,
       provider: m.provider ?? null, model: m.llmModel ?? null, modelLabel: modelLabel(m.llmModel) ?? null,
       artifacts: m.artifacts ?? [],
     })),
@@ -191,21 +193,31 @@ aiRouter.delete('/conversations/:id', requireFullAccess, async (req: AuthRequest
   } catch (err) { next(err); }
 });
 
+const RefSchema = z.object({
+  kind: z.enum(REF_KINDS),
+  id: z.string().min(1).max(200),
+  title: z.string().trim().max(200).default(''),
+});
+
 const ChatSchema = z.object({
   conversationId: objectId.optional(),
   message: z.string().max(4000).default(''),
   mediaIds: z.array(objectId).max(MAX_ATTACHMENTS).default([]),
+  /** Lumen items and PDFs attached to this message. */
+  refs: z.array(RefSchema).max(MAX_REFS).default([]),
   /** Voice conversation: the reply is written to be spoken (short, no markdown). */
   voice: z.boolean().optional(),
-}).refine(b => b.message.trim().length > 0 || b.mediaIds.length > 0, 'message or a photo is required');
+})
+  .refine(b => b.message.trim().length > 0 || b.mediaIds.length > 0 || b.refs.length > 0, 'message or an attachment is required')
+  .refine(b => b.refs.filter(r => r.kind === 'file').length <= MAX_FILE_REFS, `at most ${MAX_FILE_REFS} files per message`);
 
 /** Runs one turn and stores it. A failed turn is not stored, so the member can simply retry. */
-async function chatTurn(userId: string, conv: IAiConversationDoc, message: string, mediaIds: string[], voice = false) {
-  const history: ChatMessage[] = conv.messages.map(m => ({ role: m.role, text: m.text, mediaIds: m.mediaIds }));
-  const result = await runAssistant({ userId, history, message, mediaIds, voice });
+async function chatTurn(userId: string, conv: IAiConversationDoc, message: string, mediaIds: string[], voice = false, refs: ChatRef[] = []) {
+  const history: ChatMessage[] = conv.messages.map(m => ({ role: m.role, text: m.text, mediaIds: m.mediaIds, refs: m.refs }));
+  const result = await runAssistant({ userId, history, message, mediaIds, refs, voice });
   if (result.error) return { result, saved: false };
   const now = new Date();
-  conv.messages.push({ role: 'user', text: message, mediaIds, createdAt: now });
+  conv.messages.push({ role: 'user', text: message, mediaIds, ...(refs.length ? { refs } : {}), createdAt: now });
   conv.messages.push({
     role: 'assistant', text: result.text, mediaIds: [], createdAt: new Date(),
     provider: result.provider, llmModel: result.model, usage: result.usage,
@@ -220,13 +232,14 @@ aiRouter.post('/chat', requireFullAccess, async (req: AuthRequest, res: Response
     const parsed = ChatSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ success: false, message: parsed.error.errors[0]?.message ?? 'Invalid request.' });
     const { conversationId, message, mediaIds, voice } = parsed.data;
+    const refs = parsed.data.refs.map(r => ({ ...r, title: r.title || r.kind }));
     const userId = req.userId!;
 
     let conv = conversationId ? await AiConversation.findOne({ _id: conversationId, userId }) : null;
     if (conversationId && !conv) return res.status(404).json({ success: false, message: 'Conversation not found' });
-    if (!conv) conv = new AiConversation({ userId, title: titleFrom(message || 'Photo'), messages: [] });
+    if (!conv) conv = new AiConversation({ userId, title: titleFrom(message || refs[0]?.title || 'Photo'), messages: [] });
 
-    const { result, saved } = await chatTurn(userId, conv, message, mediaIds, !!voice);
+    const { result, saved } = await chatTurn(userId, conv, message, mediaIds, !!voice, refs);
     res.json({
       success: true,
       data: {
@@ -242,6 +255,24 @@ aiRouter.post('/chat', requireFullAccess, async (req: AuthRequest, res: Response
         artifacts: result.artifacts,
       },
     });
+  } catch (err) { next(err); }
+});
+
+// ── Things to attach ─────────────────────────────────────────────────────────
+
+const AttachablesSchema = z.object({
+  kind: z.enum(ATTACHABLE_KINDS),
+  q: z.string().max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+/** The chat's "attach" pickers: the member's own items of one kind, newest first. */
+aiRouter.get('/attachables', requireFullAccess, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const parsed = AttachablesSchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ success: false, message: 'Unknown kind.' });
+    const { kind, q, limit } = parsed.data;
+    res.json({ success: true, data: await listAttachables(req.userId!, kind, q, limit) });
   } catch (err) { next(err); }
 });
 

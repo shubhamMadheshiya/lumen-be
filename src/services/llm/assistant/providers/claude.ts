@@ -54,6 +54,10 @@ export function toClaudeTools(tools: ToolDeclaration[]): ToolParam[] {
 
 function toBlock(p: InputPart): ContentBlockParam {
   if (p.type === 'text') return { type: 'text', text: p.text };
+  // PDFs (attached lab reports, a health record's documents) go as document blocks; an image block would be rejected.
+  if (p.mimeType === 'application/pdf') {
+    return { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.base64 } };
+  }
   return {
     type: 'image',
     source: { type: 'base64', media_type: p.mimeType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif', data: p.base64 },
@@ -81,8 +85,8 @@ class ClaudeSession implements AssistantSession {
   constructor(private readonly opts: SessionOptions) {
     this.messages = [
       ...opts.history.map(m => ({ role: m.role, content: m.text || '(photo)' }) as MessageParam),
-      // Images first, then the question.
-      { role: 'user', content: [...opts.userParts.filter(p => p.type === 'image'), ...opts.userParts.filter(p => p.type === 'text')].map(toBlock) },
+      // Attachments first, each file kept right after its own label, then the question.
+      { role: 'user', content: [...opts.userParts.slice(1), opts.userParts[0]].filter(Boolean).map(toBlock) },
     ];
     this.tools = toClaudeTools(opts.tools);
   }
@@ -139,7 +143,7 @@ class ClaudeSession implements AssistantSession {
         { type: 'text', text: JSON.stringify(r.response) },
         ...(r.images ?? []).flatMap(img => [
           { type: 'text' as const, text: img.label },
-          toBlock({ type: 'image', mimeType: img.mimeType, base64: img.base64 }) as Anthropic.Beta.Messages.BetaImageBlockParam,
+          toBlock({ type: 'image', mimeType: img.mimeType, base64: img.base64 }) as Anthropic.Beta.Messages.BetaImageBlockParam | Anthropic.Beta.Messages.BetaRequestDocumentBlock,
         ]),
       ],
     }));

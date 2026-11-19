@@ -28,6 +28,32 @@ export function setFetchBytesForTesting(fn: (storageKey: string) => Promise<Buff
   fetchBytes = fn;
 }
 
+/** PDFs the member attaches to a chat message. Both providers read up to ~32 MB; keep well under. */
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+export type FileLookup =
+  | { ok: true; file: PhotoForAi }
+  | { ok: false; reason: 'not_found' | 'not_a_pdf' | 'too_large' | 'unreadable' };
+
+/**
+ * A PDF the member attached to a chat message themselves. Unlike logged photos this needs only full
+ * access (checked by the route): they picked the file for this question just now.
+ */
+export async function getFileForAi(userId: string, mediaId: string): Promise<FileLookup> {
+  if (!mongoose.isValidObjectId(mediaId)) return { ok: false, reason: 'not_found' };
+  const media = await Media.findOne({ _id: mediaId, userId }).lean();
+  if (!media) return { ok: false, reason: 'not_found' };
+  if (media.mimeType !== 'application/pdf') return { ok: false, reason: 'not_a_pdf' };
+  if (media.size && media.size > MAX_FILE_BYTES) return { ok: false, reason: 'too_large' };
+  try {
+    const bytes = await fetchBytes(media.storageKey);
+    if (bytes.length > MAX_FILE_BYTES) return { ok: false, reason: 'too_large' };
+    return { ok: true, file: { mimeType: 'application/pdf', base64: bytes.toString('base64'), takenAt: media.createdAt, sensitive: media.sensitive } };
+  } catch {
+    return { ok: false, reason: 'unreadable' };
+  }
+}
+
 export async function getPhotoForAi(userId: string, mediaId: string, photoAccess: boolean): Promise<PhotoLookup> {
   if (!photoAccess) return { ok: false, reason: 'photo_access_off' };
   if (!mongoose.isValidObjectId(mediaId)) return { ok: false, reason: 'not_found' };

@@ -64,6 +64,37 @@ describe('Claude provider', () => {
     expect(params.messages[2].content.map((b: { type: string }) => b.type)).toEqual(['image', 'text']);
   });
 
+  it('sends an attached PDF as a document block, right after its label, with the question last', async () => {
+    const { create, client } = fakeClient([reply([{ type: 'text', text: 'Hb is low.' }])]);
+    setClaudeClientForTesting(client);
+    await claudeProvider.startSession({
+      model: 'claude-haiku-5-5', system: 'sys', history: [], tools: TOOLS, effort: 'medium',
+      userParts: [
+        { type: 'text', text: 'what does my report say?' },
+        { type: 'text', text: 'Attached file "cbc.pdf":' },
+        { type: 'image', mimeType: 'application/pdf', base64: 'PDF' },
+        { type: 'text', text: 'Attached photo p1:' },
+        { type: 'image', mimeType: 'image/jpeg', base64: 'IMG' },
+      ],
+    }).next({ withTools: true, timeoutMs: 30_000 });
+    const content = create.mock.calls[0][0].messages[0].content;
+    expect(content.map((b: { type: string }) => b.type)).toEqual(['text', 'document', 'text', 'image', 'text']);
+    expect(content[1]).toEqual({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'PDF' } });
+    expect(content[4]).toEqual({ type: 'text', text: 'what does my report say?' });
+  });
+
+  it('sends a PDF returned by a tool as a document block inside the tool result', async () => {
+    const toolUse = { type: 'tool_use', id: 'tu_1', name: 'view_photo', input: { mediaId: 'd1' } };
+    const { create, client } = fakeClient([reply([toolUse], 'tool_use'), reply([{ type: 'text', text: 'ok' }])]);
+    setClaudeClientForTesting(client);
+    const s = startSession();
+    await s.next({ withTools: true, timeoutMs: 30_000 });
+    s.addToolResults([{ id: 'tu_1', name: 'view_photo', response: { ok: true }, images: [{ label: 'Document d1:', mimeType: 'application/pdf', base64: 'PDF' }] }]);
+    await s.next({ withTools: true, timeoutMs: 30_000 });
+    const last = create.mock.calls[1][0].messages.at(-1);
+    expect(last.content[0].content.map((b: { type: string }) => b.type)).toEqual(['text', 'text', 'document']);
+  });
+
   it('keeps the whole assistant turn (thinking included) and returns tool results with the photo inside', async () => {
     const thinking = { type: 'thinking', thinking: '', signature: 'sig-1' };
     const toolUse = { type: 'tool_use', id: 'tu_1', name: 'view_photo', input: { mediaId: 'm1' } };
