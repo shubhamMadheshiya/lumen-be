@@ -199,3 +199,40 @@ export function hodgesLehmannShift(pre: number[], post: number[]): number {
   for (const a of pre) for (const b of post) diffs.push(b - a);
   return median(diffs);
 }
+
+// ── Mann-Whitney U (two groups of numbers) ─────────────────────────────────────
+
+export interface MannWhitney { u: number; z: number; p: number }
+
+/**
+ * Two-sided Mann-Whitney U test, normal approximation with tie correction and continuity
+ * correction. Fine from about 6 values per group; returns p = 1 when either group is empty or
+ * every value is tied.
+ */
+export function mannWhitneyU(x: number[], y: number[]): MannWhitney {
+  const n1 = x.length;
+  const n2 = y.length;
+  if (n1 === 0 || n2 === 0) return { u: 0, z: 0, p: 1 };
+  const all = [...x.map(v => ({ v, g: 0 })), ...y.map(v => ({ v, g: 1 }))].sort((a, b) => a.v - b.v);
+  const ranks = new Array<number>(all.length);
+  let tieTerm = 0;
+  for (let i = 0; i < all.length;) {
+    let j = i;
+    while (j + 1 < all.length && all[j + 1].v === all[i].v) j++;
+    const r = (i + j) / 2 + 1;
+    for (let k = i; k <= j; k++) ranks[k] = r;
+    const t = j - i + 1;
+    tieTerm += t * t * t - t;
+    i = j + 1;
+  }
+  let r1 = 0;
+  all.forEach((a, i) => { if (a.g === 0) r1 += ranks[i]; });
+  const u = r1 - (n1 * (n1 + 1)) / 2;
+  const n = n1 + n2;
+  const mu = (n1 * n2) / 2;
+  const sigma2 = ((n1 * n2) / 12) * ((n + 1) - tieTerm / (n * (n - 1)));
+  if (sigma2 <= 0) return { u, z: 0, p: 1 };
+  const diff = u - mu;
+  const z = (Math.abs(diff) - 0.5 > 0 ? Math.abs(diff) - 0.5 : 0) / Math.sqrt(sigma2) * Math.sign(diff);
+  return { u, z, p: Math.min(1, 2 * (1 - normalCdf(Math.abs(z)))) };
+}

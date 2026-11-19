@@ -198,6 +198,27 @@ export const CreateLogEntrySchema = z.object({
   note: z.string().max(2000).optional().nullable(),
 });
 
+/** PATCH /logs/:id — only the fields the app edits; anything else in the body is dropped. */
+export const UpdateLogEntrySchema = z.object({
+  occurredAt: z.string().datetime().optional(),
+  timezone: z.string().min(1).max(64).optional(),
+  answers: z.array(AnswerSchema).max(100).optional(),
+  mediaIds: z.array(z.string()).max(40).optional(),
+  location: LogLocationSchema.optional().nullable(),
+  note: z.string().max(2000).optional().nullable(),
+});
+
+/** PUT /logs/sleep — one sleep entry per night, whoever reports it. */
+export const SleepRecordSchema = z.object({
+  wakeTime: z.string().datetime(),
+  bedtime: z.string().datetime().optional().nullable(),
+  durationMinutes: z.number().int().min(15).max(1440).optional().nullable(),
+  quality: z.enum(['RESTFUL', 'GOOD', 'FAIR', 'POOR']).optional().nullable(),
+  source: z.enum(['device', 'tracker', 'buttons']),
+  timezone: z.string().max(64).optional().nullable(),
+  location: LogLocationSchema.optional().nullable(),
+});
+
 export const BatchLogEntrySchema = z.object({
   entries: z.array(CreateLogEntrySchema).min(1).max(100),
 });
@@ -262,13 +283,48 @@ export const CreateReminderSchema = z.object({
 
 // ────────── Medication ──────────
 
+const DayKeyString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const DoseTimeSchema = z.object({
+  slot: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  amount: z.string().max(40).optional(),
+});
+
 export const CreateMedicationSchema = z.object({
   name: z.string().min(1).max(100),
   dose: z.string().max(50).optional(),
   unit: z.string().max(20).optional(),
   schedule: z.string().max(200).optional(),
   active: z.boolean().default(true),
-  startedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  startedOn: DayKeyString.optional(),
+  /** "As needed": never planned, so never counted as skipped. */
+  prn: z.boolean().optional(),
+  doseTimes: z.array(DoseTimeSchema).max(12).optional(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+});
+
+export const UpdateMedicationSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  dose: z.string().max(50).optional().nullable(),
+  unit: z.string().max(20).optional().nullable(),
+  schedule: z.string().max(200).optional().nullable(),
+  active: z.boolean().optional(),
+  startedOn: DayKeyString.optional().nullable(),
+  stoppedOn: DayKeyString.optional().nullable(),
+  prn: z.boolean().optional(),
+  doseTimes: z.array(DoseTimeSchema).max(12).optional(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+});
+
+/** PUT /medications/:id/doses — mark one dose Taken / Skipped / Extra. */
+export const DoseMarkSchema = z.object({
+  dayKey: DayKeyString,
+  slot: z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d|prn|unscheduled)$/),
+  status: z.enum(['taken', 'skipped', 'extra']),
+  at: z.string().datetime().optional(),
+  clientId: z.string().min(1).max(120),
+  clientUpdatedAt: z.string().datetime().optional(),
+  source: z.enum(['notification', 'checklist', 'backfill', 'ai']).default('checklist'),
+  note: z.string().max(300).optional(),
 });
 
 /** Logs a start, stop or dose change for a medicine, so progress trends can show it as a marker. */

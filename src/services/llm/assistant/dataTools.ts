@@ -28,6 +28,7 @@ import { shiftDayKey, trackingDayKey } from '../../../utils/dayKey';
 import { getPhotoForAi, type PhotoForAi } from './mediaBytes';
 import { clipJson, MAX_REF_CHARS, refFailureText, resolveRef } from './attachments';
 import { REF_KINDS, type RefKind } from './refTypes';
+import { exploreForAi, metricsForAi, type ExploreToolArgs } from '../../analytics/aiQuery';
 
 export interface ToolContext {
   userId: string;
@@ -170,7 +171,7 @@ export interface ToolDeclaration {
   parameters?: ToolSchema;
 }
 
-const S = { OBJECT: 'object', STRING: 'string', INTEGER: 'integer', BOOLEAN: 'boolean' } as const;
+const S = { OBJECT: 'object', STRING: 'string', INTEGER: 'integer', BOOLEAN: 'boolean', NUMBER: 'number', ARRAY: 'array' } as const;
 const dateRange = {
   from: { type: S.STRING, description: 'First Lumen day, YYYY-MM-DD. Defaults to 30 days before `to`.' },
   to: { type: S.STRING, description: 'Last Lumen day, YYYY-MM-DD. Defaults to today.' },
@@ -250,6 +251,37 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     name: 'view_photo',
     description: 'Look at one photo by its id. The image is attached to the reply so you can describe and analyse it. View at most 4 per answer.',
     parameters: { type: S.OBJECT, properties: { mediaId: { type: S.STRING } }, required: ['mediaId'] },
+  },
+  {
+    name: 'explore_relations',
+    description: 'Lumen Explore: for one thing (a symptom, a flare, a skipped medicine, a metric over/under a value, symptoms rising above usual, or a date period) compare what else was logged before or after it, across ALL logs (foods, medicines, habits, symptoms, sleep, steps, water, weather, energy, stress). Returns plain counts with multiple-comparison control. Use this for "what came before my weakness", "what happens after I skip X", "why was last week bad". Prefer it over counting get_day_summaries yourself.',
+    parameters: {
+      type: S.OBJECT,
+      properties: {
+        target: { type: S.STRING, description: 'item (default) | flare | skipped_medicine | took_medicine | metric | rise | period' },
+        item: { type: S.STRING, description: 'For item/rise: the logged thing in words, e.g. "weakness", "dairy". For rise, "symptoms" means the day’s worst severity.' },
+        min_severity: { type: S.INTEGER, description: 'For item: only days at or above this severity (0-10).' },
+        medicine: { type: S.STRING, description: 'For skipped_medicine/took_medicine: the medicine name.' },
+        metric: { type: S.STRING, description: 'For metric: sleep_hours, steps, walk_min, exercise_min, water_ml, energy, stress, mood, overall, symptom_max, temp_max, humidity, pressure, pressure_change, uv, rain.' },
+        op: { type: S.STRING, description: 'For metric: below | above' },
+        value: { type: S.NUMBER, description: 'For metric: the threshold, in its unit.' },
+        from: { type: S.STRING, description: 'For period: YYYY-MM-DD' },
+        to: { type: S.STRING, description: 'For period: YYYY-MM-DD' },
+        direction: { type: S.STRING, description: 'before (default: what came before it) | after (what followed it)' },
+        range: { type: S.STRING, description: '90d | 180d | 365d (default) | all' },
+      },
+    },
+  },
+  {
+    name: 'get_metrics',
+    description: 'Averages for the member’s daily numbers over a range vs the previous range: sleep, steps, walking, exercise, water, energy, stress, mood, overall, worst symptom, flare days, weather, medicine adherence (by medicine name), or any logged item by name (times per day). Each comes with how many days it is based on, change and trend.',
+    parameters: {
+      type: S.OBJECT,
+      properties: {
+        metrics: { type: S.ARRAY, items: { type: S.STRING }, description: 'Metric ids (sleep_hours, steps, walk_min, exercise_min, water_ml, energy, stress, mood, overall, symptom_max, flare_days, temp_max, humidity, pressure, uv, rain), medicine names, or item names. Empty = the usual set.' },
+        range: { type: S.STRING, description: '7d | 30d (default) | 90d | 365d' },
+      },
+    },
   },
   {
     name: 'open_attachment',
@@ -511,6 +543,15 @@ const handlers: Record<string, Handler> = {
       response: { ok: true, mediaId, takenAt: res.photo.takenAt, sensitive: res.photo.sensitive, note: 'The image is attached below.' },
       images: [{ ...res.photo, mediaId }],
     };
+  },
+
+  async explore_relations(ctx, args) {
+    return { response: await exploreForAi(ctx.userId, args as ExploreToolArgs) };
+  },
+
+  async get_metrics(ctx, args) {
+    const names = Array.isArray(args.metrics) ? args.metrics.map(String).filter(Boolean) : [];
+    return { response: await metricsForAi(ctx.userId, names, String(args.range ?? '30d')) };
   },
 
   async open_attachment(ctx, args) {

@@ -41,6 +41,10 @@ export interface IUserDoc extends Document {
     /** Quiet hours (22:00 to 08:00 local) for community push. */
     communityQuiet?: boolean;
     aiJournalNoteId?: string;
+    /** Metrics pinned on Insights › Metrics (PUT /analytics/pins only). */
+    analyticsPins?: string[];
+    /** Rounded (2 decimals, ~1 km) location for the daily weather job (PUT /weather/location only). */
+    weatherLocation?: { lat: number; lon: number; updatedAt: Date };
   };
   consentAcceptedAt?: Date;
   configVersion: number;
@@ -83,6 +87,12 @@ const UserSchema = new Schema<IUserDoc>(
       communityPush:   { type: Boolean },
       communityQuiet:  { type: Boolean },
       aiJournalNoteId: { type: String },
+      analyticsPins:   { type: [String], default: undefined },
+      weatherLocation: {
+        lat:       { type: Number },
+        lon:       { type: Number },
+        updatedAt: { type: Date },
+      },
     },
     consentAcceptedAt: { type: Date },
     configVersion:     { type: Number, default: 1 },

@@ -27,6 +27,9 @@ export interface IReminderDoc extends Document {
   
   linkedQuickActionId?: mongoose.Types.ObjectId;
   linkedQuestionId?: mongoose.Types.ObjectId;
+  /** A medicine reminder's medicine and dose time, so "Taken" / "Skip" mark the right dose. */
+  medicationId?: mongoose.Types.ObjectId;
+  doseSlot?: string;
   
   // Legacy / fallback fields
   type?: 'time' | 'inactivity';
@@ -71,6 +74,8 @@ const ReminderSchema = new Schema<IReminderDoc>(
     sound:                      { type: String, default: 'default' },
     linkedQuickActionId:        { type: Schema.Types.ObjectId, ref: 'QuickAction' },
     linkedQuestionId:           { type: Schema.Types.ObjectId, ref: 'Question' },
+    medicationId:               { type: Schema.Types.ObjectId, ref: 'Medication' },
+    doseSlot:                   { type: String, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
     
     // Legacy support
     type:                       { type: String, enum: ['time', 'inactivity'] },

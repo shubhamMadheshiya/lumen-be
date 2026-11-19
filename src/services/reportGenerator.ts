@@ -371,6 +371,11 @@ export function aggregateQuickActions(items: FormattedLogItem[]): FormattedLogIt
   return result;
 }
 
+/** "Missed dose", "Skipped", "Not taken", "No" … — an answer that says a dose was NOT taken. */
+export function isMissedDoseLabel(label: string): boolean {
+  return /\b(miss(ed)?|skip(ped)?|forgot|forgotten|not taken|didn'?t take|no)\b/i.test(label);
+}
+
 /**
  * Computes clinical highlights for the Executive Summary
  */
@@ -424,7 +429,7 @@ export function computeClinicalHighlights(items: FormattedLogItem[]) {
           medicationRecords[ans.label] = { taken: 0, total: 0 };
         }
         medicationRecords[ans.label].total += 1;
-        if (lowerLbl.includes('taken') || lowerLbl === 'yes' || !lowerLbl.includes('no')) {
+        if (!isMissedDoseLabel(lowerLbl)) {
           medicationRecords[ans.label].taken += 1;
         }
       }

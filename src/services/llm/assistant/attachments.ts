@@ -20,6 +20,8 @@ import { docToMarkdown } from '../../../shared/notes/docUtils';
 import { presentFindings } from '../../insightPresenter';
 import { flattenBlocks, runTool, type ToolContext } from './dataTools';
 import { getFileForAi, getPhotoForAi, type PhotoForAi } from './mediaBytes';
+import { decodeSpecToken, runExplore } from '../../analytics/exploreService';
+import { compactExplore } from '../../analytics/exploreCompact';
 
 import { type ChatRef, type RefKind } from './refTypes';
 
@@ -36,6 +38,7 @@ const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const KIND_LABEL: Record<RefKind, string> = {
   day: 'day', note: 'note', task: 'task', list: 'to-do list', medication: 'medicine', record: 'health record',
   flare: 'flare', experiment: 'experiment', pattern: 'insight pattern', weekly_report: 'weekly review', file: 'file',
+  analysis: 'Explore analysis',
 };
 
 export const refLabel = (ref: Pick<ChatRef, 'kind' | 'id' | 'title'>) => `${KIND_LABEL[ref.kind]} "${ref.title}" [${ref.kind}:${ref.id}]`;
@@ -198,6 +201,13 @@ const resolvers: Record<RefKind, Resolver> = {
     const r = await AiWeeklyReport.findOne({ _id: id, userId: oid(ctx.userId) }).lean();
     if (!r) return { ok: false, reason: 'not_found' };
     return { ok: true, data: { id, weekStart: r.weekStart, weekEnd: r.weekEnd, text: r.text }, files: [] };
+  },
+
+  async analysis(ctx, id) {
+    const parsed = decodeSpecToken(id);
+    if (!parsed || !parsed.success) return { ok: false, reason: 'invalid' };
+    const result = await runExplore(ctx.userId, parsed.data);
+    return { ok: true, data: compactExplore(result, parsed.data), files: [] };
   },
 
   async file(ctx, id) {

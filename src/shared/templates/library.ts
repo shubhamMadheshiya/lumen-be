@@ -572,6 +572,60 @@ const categoryVitals: TemplateCategory = {
 };
 
 // ─────────────────────────────────────────────
+//  CATEGORY: Neuro symptoms (weakness, numbness, paralysis…)
+// ─────────────────────────────────────────────
+
+const sideField = {
+  key: 'side',
+  label: 'Which side?',
+  dataType: 'enum',
+  displayAs: 'chips',
+  enumValues: [
+    { value: 'left', label: 'Left' },
+    { value: 'right', label: 'Right' },
+    { value: 'both', label: 'Both' },
+  ],
+};
+
+const neuroOption = (templateKey: string, label: string, icon: string, order: number, extra: TemplateOption['fields'] = []): TemplateOption => ({
+  templateKey, label, icon, color: '#7E57C2', allowComment: true, captureTime: 'user_picks', order,
+  fields: [severityField, sideField, ...extra],
+});
+
+const categoryNeuro: TemplateCategory = {
+  templateKey: 'cat_neuro',
+  name: 'Neuro symptoms',
+  icon: '🧠',
+  color: '#7E57C2',
+  role: 'symptom',
+  order: 8,
+  questions: [
+    {
+      templateKey: 'q_neuro',
+      title: 'Any nerve or muscle symptoms?',
+      helpText: 'Select all that apply right now',
+      icon: '🧠',
+      selectionType: 'multiple',
+      allowOther: true,
+      required: false,
+      frequency: 'anytime',
+      order: 1,
+      options: [
+        neuroOption('opt_weakness', 'Weakness', '💪', 1, [{ key: 'location', label: 'Where?', dataType: 'location', displayAs: 'body-map' }]),
+        neuroOption('opt_numbness', 'Numbness', '🫥', 2, [{ key: 'location', label: 'Where?', dataType: 'location', displayAs: 'body-map' }]),
+        neuroOption('opt_tingling', 'Tingling / pins and needles', '⚡', 3, [{ key: 'location', label: 'Where?', dataType: 'location', displayAs: 'body-map' }]),
+        neuroOption('opt_paralysis', 'Paralysis / cannot move', '🦵', 4, [
+          { key: 'location', label: 'Where?', dataType: 'location', displayAs: 'body-map' },
+          { key: 'duration', label: 'How long?', dataType: 'duration', displayAs: 'picker' },
+        ]),
+        neuroOption('opt_vision_change', 'Vision change', '👁️', 5),
+        neuroOption('opt_balance', 'Balance / dizziness', '🌀', 6),
+      ],
+    },
+  ],
+};
+
+// ─────────────────────────────────────────────
 //  Quick actions
 // ─────────────────────────────────────────────
 
@@ -653,6 +707,14 @@ export const CONDITION_BUNDLES: ConditionBundle[] = [
     quickActionKeys: ['qa_water', 'qa_medication', 'qa_walk', 'qa_coffee', 'qa_flare'],
   },
   {
+    key: 'neuro',
+    label: 'MS / Neuro (weakness, numbness)',
+    icon: '🧠',
+    description: 'Tracks weakness, numbness, tingling, vision, balance, fatigue, heat and medicines',
+    categoryKeys: ['cat_symptoms', 'cat_neuro', 'cat_food', 'cat_habits', 'cat_medications', 'cat_mood'],
+    quickActionKeys: ['qa_water', 'qa_medication', 'qa_walk', 'qa_rest', 'qa_flare'],
+  },
+  {
     key: 'general',
     label: 'General / Other',
     icon: '🌿',
@@ -674,6 +736,7 @@ export const ALL_CATEGORY_TEMPLATES: TemplateCategory[] = [
   categoryBodyOutput,
   categoryMood,
   categoryVitals,
+  categoryNeuro,
 ];
 
 export function getCategoryTemplate(key: string): TemplateCategory | undefined {

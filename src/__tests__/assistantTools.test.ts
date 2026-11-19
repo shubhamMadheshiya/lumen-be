@@ -47,6 +47,11 @@ jest.mock('../services/insightPresenter', () => ({
   presentProgress: jest.fn().mockReturnValue({ trend: { state: 'steady' } }),
 }));
 jest.mock('../services/llm/assistant/mediaBytes', () => ({ getPhotoForAi: jest.fn() }));
+// Explore / Metrics read through the analytics layer: record which member they were asked for.
+jest.mock('../services/analytics/aiQuery', () => ({
+  exploreForAi: jest.fn(async (userId: string) => { mockCalls.push({ model: 'DayMetric', method: 'explore', filter: { userId } }); return { ok: true }; }),
+  metricsForAi: jest.fn(async (userId: string) => { mockCalls.push({ model: 'DayMetric', method: 'metrics', filter: { userId } }); return { ok: true }; }),
+}));
 
 const ME = new mongoose.Types.ObjectId().toString();
 const photoId = new mongoose.Types.ObjectId().toString();

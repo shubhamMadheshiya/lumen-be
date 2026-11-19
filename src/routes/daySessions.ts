@@ -3,25 +3,23 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { AppError } from '../utils/errors';
 import { DaySession } from '../models/DaySession';
-import { LogEntry } from '../models/LogEntry';
 import { WakeUpSchema, GoToSleepSchema, UpdateDaySessionSchema } from '../shared';
 import mongoose from 'mongoose';
+import { userDayContext } from '../utils/userDay';
+import { upsertSleepRecord } from '../services/sleep/sleepRecord';
 
 export const daySessionsRouter = Router();
 daySessionsRouter.use(authenticate);
 
-/** Format today's date as YYYY-MM-DD in a given UTC offset, or use the day based on an ISO string. */
-function toSessionDate(isoOrNow?: string): string {
-  const d = isoOrNow ? new Date(isoOrNow) : new Date();
-  return d.toISOString().slice(0, 10);
-}
-
-// POST /day-sessions/wake — record wake-up time (once per day session)
+// POST /day-sessions/wake — record wake-up time (once per Lumen day)
 daySessionsRouter.post('/wake', validate(WakeUpSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = new mongoose.Types.ObjectId(req.userId!);
     const wakeTime = req.body.wakeTime ? new Date(req.body.wakeTime) : new Date();
-    const sessionDate = toSessionDate(wakeTime.toISOString());
+    // The Lumen day in the member's own zone and boundary (not the UTC date, which put
+    // Indian mornings before 05:30 on the previous day).
+    const ctx = await userDayContext(userId);
+    const sessionDate = ctx.dayKeyOf(wakeTime);
 
     // Upsert the session for this date; disallow overwrite if wakeTime already set
     const existing = await DaySession.findOne({ userId, sessionDate });
@@ -38,46 +36,17 @@ daySessionsRouter.post('/wake', validate(WakeUpSchema), async (req: AuthRequest,
       { upsert: true, new: true },
     );
 
-    // Automatically create/upsert a sleep record in Timeline
+    // The night that just ended started at the previous session's bedtime. Without one there is
+    // no real duration, so no sleep entry is made (it used to invent an 8-hour night).
     try {
-      const bedtimeMs = session.sleepTime ? new Date(session.sleepTime).getTime() : wakeTime.getTime() - 8 * 3600000;
-      const durationMinutes = Math.max(15, Math.round((wakeTime.getTime() - bedtimeMs) / 60000));
-      const hours = Math.floor(durationMinutes / 60);
-      const mins = durationMinutes % 60;
-      const clientId = `sleep:${userId.toString()}:${sessionDate}`;
-      const bedtimeStr = session.sleepTime ? new Date(session.sleepTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
-      const wakeStr = wakeTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      const note = bedtimeStr
-        ? `Sleep: ${hours}h ${mins}m (${bedtimeStr} – ${wakeStr})`
-        : `Sleep: ${hours}h ${mins}m (woke at ${wakeStr})`;
-
-      await LogEntry.findOneAndUpdate(
-        { userId, clientId },
-        {
-          $set: {
-            source: 'sleep',
-            occurredAt: wakeTime,
-            loggedAt: new Date(),
-            timezone: 'UTC',
-            note,
-            answers: [
-              {
-                optionId: 'sleep_summary',
-                optionLabelSnapshot: `${hours}h ${mins}m sleep`,
-                values: [
-                  { fieldKey: 'sleep_duration_minutes', dataType: 'number', value: durationMinutes, unit: 'minutes' },
-                  ...(session.sleepTime ? [{ fieldKey: 'bedtime', dataType: 'string', value: new Date(session.sleepTime).toISOString() }] : []),
-                  { fieldKey: 'wake_time', dataType: 'string', value: wakeTime.toISOString() },
-                ],
-              },
-            ],
-          },
-          $setOnInsert: { userId, clientId, daySessionId: session._id },
-        },
-        { upsert: true }
-      );
+      const previous = await DaySession.findOne({ userId, sessionDate: { $lt: sessionDate }, sleepTime: { $exists: true, $ne: null } })
+        .sort({ sessionDate: -1 }).lean();
+      const bed = previous?.sleepTime ? new Date(previous.sleepTime) : null;
+      if (bed && wakeTime.getTime() - bed.getTime() <= 16 * 3600000) {
+        await upsertSleepRecord(String(userId), { wakeTime, bedtime: bed, source: 'buttons', daySessionId: session._id as mongoose.Types.ObjectId });
+      }
     } catch (err) {
-      // Non-blocking if timeline log upsert fails
+      console.warn('[daySessions] sleep entry not saved:', err);
     }
 
     res.status(201).json({ success: true, data: session });

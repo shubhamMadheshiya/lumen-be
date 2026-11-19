@@ -26,6 +26,9 @@ import { communityChatRouter } from './routes/communityChat';
 import { notificationPolicyRouter } from './routes/notificationPolicy';
 import { recordsRouter } from './routes/records';
 import { aiRouter } from './routes/ai';
+import { dosesRouter } from './routes/doses';
+import { analyticsRouter } from './routes/analytics';
+import { weatherRouter } from './routes/weather';
 
 export function createApp(): Application {
   const app = express();
@@ -84,6 +87,8 @@ export function createApp(): Application {
     authRouter(req, res, next);
   });
   app.use(`${v1}/config`,            configRouter);
+  // Dose marks first; anything else under /medications falls through to the config routes.
+  app.use(`${v1}/medications`,       dosesRouter);
   ['/categories', '/questions', '/options', '/quick-actions', '/units', '/medications'].forEach(subPath => {
     app.use(`${v1}${subPath}`, (req: Request, res: Response, next: NextFunction) => {
       req.url = subPath + (req.url === '/' ? '' : req.url);
@@ -106,6 +111,8 @@ export function createApp(): Application {
   app.use(`${v1}/notification-policy`, notificationPolicyRouter);
   app.use(`${v1}/records`,           recordsRouter);
   app.use(`${v1}/ai`,                aiRouter);
+  app.use(`${v1}/analytics`,         analyticsRouter);
+  app.use(`${v1}/weather`,           weatherRouter);
 
   // ── 404 ───────────────────────────────────────
   app.use((_req, res) => {

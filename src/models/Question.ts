@@ -20,6 +20,8 @@ export interface IQuestionDoc extends Document {
   isActive: boolean;
   archivedAt?: Date;
   templateKey?: string;
+  /** Which daily number this feeds (water ml, exercise/walk minutes, hours slept). */
+  metricRole?: 'water' | 'exercise' | 'walk' | 'sleep' | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +47,7 @@ const QuestionSchema = new Schema<IQuestionDoc>(
     isActive:    { type: Boolean, default: true },
     archivedAt:  { type: Date },
     templateKey: { type: String },
+    metricRole: { type: String, enum: ['water', 'exercise', 'walk', 'sleep', null], default: undefined },
   },
   { timestamps: true },
 );

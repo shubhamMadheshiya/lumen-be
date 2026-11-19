@@ -24,10 +24,13 @@ import {
   CreateQuickActionSchema, UpdateQuickActionSchema,
   CreateCustomUnitSchema,
   CreateMedicationSchema,
+  UpdateMedicationSchema,
   AddMedicationChangeSchema,
   CreateReminderSchema,
   ReorderSchema,
 } from '../shared';
+import { userDayContext } from '../utils/userDay';
+import { withScheduleVersion } from '../services/meds/doses';
 
 export const configRouter = Router();
 configRouter.use(authenticate);
@@ -694,7 +697,14 @@ configRouter.delete('/units/:id', async (req: AuthRequest, res: Response, next: 
 
 configRouter.post('/medications', validate(CreateMedicationSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const doc = await Medication.create({ ...req.body, userId: uid(req) });
+    const body = req.body as z.infer<typeof CreateMedicationSchema>;
+    const today = (await userDayContext(uid(req))).dayKeyOf(new Date());
+    const plan = { doseTimes: body.doseTimes ?? [], daysOfWeek: body.daysOfWeek ?? [], prn: !!body.prn };
+    const hasPlan = plan.prn || plan.doseTimes.length > 0;
+    const doc = await Medication.create({
+      ...body, ...plan, userId: uid(req),
+      scheduleHistory: hasPlan ? withScheduleVersion([], plan, body.startedOn && body.startedOn < today ? body.startedOn : today) : [],
+    });
     res.status(201).json({ success: true, data: doc });
   } catch (err) { next(err); }
 });
@@ -706,14 +716,27 @@ configRouter.get('/medications', async (req: AuthRequest, res: Response, next: N
   } catch (err) { next(err); }
 });
 
-configRouter.patch('/medications/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+configRouter.patch('/medications/:id', validate(UpdateMedicationSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const doc = await Medication.findOneAndUpdate(
-      { _id: req.params.id, userId: uid(req) },
-      req.body,
-      { new: true },
-    );
+    const body = req.body as z.infer<typeof UpdateMedicationSchema>;
+    const doc = await Medication.findOne({ _id: req.params.id, userId: uid(req) });
     if (!doc) throw AppError.notFound();
+    const { doseTimes, daysOfWeek, prn, ...rest } = body;
+    for (const [k, v] of Object.entries(rest)) doc.set(k, v === null ? undefined : v);
+    if (doseTimes !== undefined || daysOfWeek !== undefined || prn !== undefined) {
+      const plan = {
+        doseTimes: doseTimes ?? doc.doseTimes ?? [],
+        daysOfWeek: daysOfWeek ?? doc.daysOfWeek ?? [],
+        prn: prn ?? doc.prn ?? false,
+      };
+      doc.doseTimes = plan.doseTimes;
+      doc.daysOfWeek = plan.daysOfWeek;
+      doc.prn = plan.prn;
+      // Past days keep the plan that applied then; the new plan starts today.
+      const today = (await userDayContext(uid(req))).dayKeyOf(new Date());
+      doc.scheduleHistory = withScheduleVersion(doc.scheduleHistory ?? [], plan, today) as typeof doc.scheduleHistory;
+    }
+    await doc.save();
     res.json({ success: true, data: doc });
   } catch (err) { next(err); }
 });

@@ -318,6 +318,8 @@ export interface IReminder {
   // Linkages to Tracking Engine
   linkedQuickActionId?: string;   // QuickAction ID to trigger on action
   linkedQuestionId?: string;      // Questionnaire ID for deep logging
+  medicationId?: string;          // A medicine reminder: which medicine Taken/Skip marks
+  doseSlot?: string;              // …and which dose time ('HH:mm'); defaults to targetTime
   
   // Backwards compatibility with legacy fields
   type?: ReminderType;
@@ -1001,7 +1003,7 @@ export interface IHealthRecord {
 // ── Lumen AI chat attachments ────────────────────────────────────────────────
 
 /** What a Lumen AI chat attachment can point at (see server services/llm/assistant/refTypes.ts). */
-export type AiChatRefKind = 'day' | 'note' | 'task' | 'list' | 'medication' | 'record' | 'flare' | 'experiment' | 'pattern' | 'weekly_report' | 'file';
+export type AiChatRefKind = 'day' | 'note' | 'task' | 'list' | 'medication' | 'record' | 'flare' | 'experiment' | 'pattern' | 'weekly_report' | 'file' | 'analysis';
 
 export interface IAiChatRef {
   kind: AiChatRefKind;

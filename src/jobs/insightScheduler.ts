@@ -9,6 +9,8 @@ import { LogEntry } from '../models/LogEntry';
 import { computeInsights } from '../services/insightService';
 import { DEFAULT_BOUNDARY_HOUR, resolveTimeZone } from '../utils/dayKey';
 import { runDueWeeklyReviews } from '../services/llm/assistant/weeklyReview';
+import { rebuildAllMetrics } from '../services/analytics/freshness';
+import { refreshWeather } from '../services/weather/weatherDays';
 
 /** Hour of day (0-23) at `date` in `timeZone`. */
 export function localHour(date: Date, timeZone: string): number {
@@ -42,7 +44,7 @@ export function startInsightScheduler(): void {
     try {
       const now = new Date();
       const usersWithData = await LogEntry.distinct('userId');
-      const users = await User.find({ _id: { $in: usersWithData } }).select('preferences.timezone preferences.dayBoundaryHour').lean();
+      const users = await User.find({ _id: { $in: usersWithData } }).select('preferences.timezone preferences.dayBoundaryHour preferences.weatherLocation').lean();
       const due = users.filter(u => isDueNow(u.preferences, now));
       if (due.length === 0) return;
 
@@ -55,6 +57,13 @@ export function startInsightScheduler(): void {
         } catch (err) {
           console.error(`[scheduler] Error for user ${u._id}:`, err);
         }
+        // Yesterday's weather is final now; then rebuild Explore/Metrics rows as a safety net.
+        const loc = u.preferences?.weatherLocation;
+        if (loc && typeof loc.lat === 'number' && typeof loc.lon === 'number') {
+          await refreshWeather(String(u._id), loc.lat, loc.lon, resolveTimeZone(u.preferences?.timezone), 3)
+            .catch(err => console.warn(`[scheduler] weather for ${u._id}:`, err instanceof Error ? err.message : err));
+        }
+        await rebuildAllMetrics(String(u._id)).catch(err => console.error(`[scheduler] metrics for ${u._id}:`, err));
       }
       console.log(`[scheduler] Insight computation done. Processed ${processed} users.`);
     } catch (err) {
