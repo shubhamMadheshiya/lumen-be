@@ -123,6 +123,8 @@ export interface IQuestion {
   templateKey?: string;
   createdAt: string;
   updatedAt: string;
+  /** What this question measures for Metrics; null = nothing, unset = guessed from the template/label. */
+  metricRole?: 'water' | 'exercise' | 'walk' | 'sleep' | null;
 }
 
 export interface IOption {
@@ -141,6 +143,8 @@ export interface IOption {
   templateKey?: string;
   createdAt: string;
   updatedAt: string;
+  /** Explore/Metrics count this option as that one (a duplicate). */
+  mergedInto?: string | null;
 }
 
 export interface IQuickAction {
@@ -162,6 +166,8 @@ export interface IQuickAction {
   templateKey?: string;
   createdAt: string;
   updatedAt: string;
+  /** What this tap measures for Metrics; null = nothing, unset = guessed from the template/label. */
+  metricRole?: 'water' | 'exercise' | 'walk' | 'sleep' | null;
 }
 
 export interface ICustomUnit {

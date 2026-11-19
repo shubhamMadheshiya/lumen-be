@@ -80,6 +80,8 @@ export interface IOptionDoc extends Document {
   order: number;
   isActive: boolean;
   archivedAt?: Date;
+  /** Explore/Metrics count this option as that one (a duplicate the member merged). */
+  mergedInto?: mongoose.Types.ObjectId | null;
   templateKey?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -98,6 +100,7 @@ const OptionSchema = new Schema<IOptionDoc>(
     order:       { type: Number, default: 0 },
     isActive:    { type: Boolean, default: true },
     archivedAt:  { type: Date },
+    mergedInto:  { type: Schema.Types.ObjectId, ref: 'Option', default: undefined },
     templateKey: { type: String },
   },
   { timestamps: true },

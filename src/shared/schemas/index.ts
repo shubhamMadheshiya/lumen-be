@@ -71,6 +71,9 @@ export const ConditionalDisplaySchema = z.object({
   optionId: z.string(),
 });
 
+/** What a question or quick tap measures for Metrics (water ml, exercise/walk minutes, hours slept); null = nothing, 'auto' = guess again. */
+export const MetricRoleSchema = z.enum(['water', 'exercise', 'walk', 'sleep', 'auto']).nullable();
+
 export const CreateQuestionSchema = z.object({
   categoryId: z.string(),
   title: z.string().min(1).max(200),
@@ -83,6 +86,7 @@ export const CreateQuestionSchema = z.object({
   frequency: z.enum(['anytime', 'once_per_day', 'morning', 'evening']).default('anytime'),
   conditionalDisplay: ConditionalDisplaySchema.optional(),
   order: z.number().int().min(0).optional(),
+  metricRole: MetricRoleSchema.optional(),
 });
 
 export const UpdateQuestionSchema = CreateQuestionSchema.partial().extend({
@@ -104,6 +108,8 @@ export const CreateOptionSchema = z.object({
 
 export const UpdateOptionSchema = CreateOptionSchema.partial().extend({
   isActive: z.boolean().optional(),
+  /** Explore/Metrics count this option as another one (a duplicate); null undoes it. */
+  mergedInto: z.string().regex(/^[0-9a-f]{24}$/).nullable().optional(),
 });
 
 // ────────── QuickAction ──────────
@@ -121,6 +127,7 @@ export const CreateQuickActionSchema = z.object({
   analysis: AnalysisSchema.optional(),
   order: z.number().int().min(0).optional(),
   isVisible: z.boolean().default(true),
+  metricRole: MetricRoleSchema.optional(),
 });
 
 export const UpdateQuickActionSchema = CreateQuickActionSchema.partial();

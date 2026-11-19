@@ -33,13 +33,15 @@ const id = (v: unknown) => String(v);
 
 /** Config that changes how EVERY day is read; when it changes, everything is rebuilt. */
 export async function configHash(uid: mongoose.Types.ObjectId): Promise<string> {
-  const [cats, qas, qs, meds] = await Promise.all([
+  const [cats, qas, qs, meds, merged] = await Promise.all([
     Category.find({ userId: uid }).select('name role analysis').lean(),
     QuickAction.find({ userId: uid }).select('label analysis defaultValue unit metricRole templateKey').lean(),
     Question.find({ userId: uid }).select('title categoryId metricRole templateKey').lean(),
     Medication.find({ userId: uid }).select('prn scheduleHistory startedOn stoppedOn').lean(),
+    Option.find({ userId: uid, mergedInto: { $exists: true, $ne: null } }).select('mergedInto').lean(),
   ]);
   const payload = JSON.stringify({
+    o: merged.map(o => `${id(o._id)}>${id(o.mergedInto)}`).sort(),
     c: cats.map(c => [id(c._id), c.name, categoryKind(c)]).sort(),
     q: qas.map(q => [id(q._id), q.label, quickActionKind(q), q.defaultValue ?? null, q.unit ?? null, inferMetricRole(q.metricRole, q.templateKey, q.label)]).sort(),
     s: qs.map(q => [id(q._id), id(q.categoryId), inferMetricRole(q.metricRole, q.templateKey, q.title)]).sort(),
@@ -78,7 +80,7 @@ export async function buildRange(uid: mongoose.Types.ObjectId, ctx: UserDayConte
     Category.find({ userId: uid }).select('name role analysis').lean(),
     QuickAction.find({ userId: uid }).select('label analysis defaultValue unit metricRole templateKey').lean(),
     Question.find({ userId: uid }).select('title categoryId metricRole templateKey').lean(),
-    Option.find({ userId: uid }).select('questionId').lean(),
+    Option.find({ userId: uid }).select('questionId mergedInto').lean(),
     DaySession.find({ userId: uid, sessionDate: { $gte: shiftDayKey(from, -1), $lte: to } }).select('sessionDate wakeTime sleepTime').lean(),
     DailyActivity.find({ userId: uid, date: { $gte: from, $lte: to } }).select('date steps').lean(),
     ActivitySession.find({ userId: uid, activityType: { $in: ['WALKING', 'EXERCISE'] }, status: { $ne: 'DISCARDED' }, startTime: { $gte: start, $lt: end } })
@@ -100,9 +102,11 @@ export async function buildRange(uid: mongoose.Types.ObjectId, ctx: UserDayConte
     return [id(q._id), { label: q.title, categoryId: id(q.categoryId), metricRole: inferMetricRole(q.metricRole as MetricRole | null | undefined, q.templateKey, q.title) }];
   }));
   const optionCategory = new Map<string, string>();
+  const optionMerge = new Map<string, string>();
   for (const o of opts) {
     const cat = questionCat.get(id(o.questionId));
     if (cat) optionCategory.set(id(o._id), cat);
+    if (o.mergedInto) optionMerge.set(id(o._id), id(o.mergedInto));
   }
 
   const walkMinutes = new Map<string, number>();
@@ -134,7 +138,7 @@ export async function buildRange(uid: mongoose.Types.ObjectId, ctx: UserDayConte
   }));
 
   return buildMetricRows({
-    entries: input, categories, quickActions, questions, optionCategory,
+    entries: input, categories, quickActions, questions, optionCategory, optionMerge,
     steps: new Map(daily.map(d => [d.date, d.steps])),
     walkMinutes, exerciseMinutes,
     sessions: new Map(sessions.map(s => [s.sessionDate, { wakeTime: s.wakeTime, sleepTime: s.sleepTime }])),

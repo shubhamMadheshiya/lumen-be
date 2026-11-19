@@ -3,6 +3,7 @@
  *
  *   node dist/scripts/migrateAnalytics.js            # report only
  *   node dist/scripts/migrateAnalytics.js --apply    # make the changes
+ *   … --map "hcq=Hydroxychloroquine" --map "vit d=Vitamin D3"   # old typed name = medicine name
  *
  * 1. Sleep entries: one per night. Copies of the same night are soft-deleted (the most complete
  *    one is kept and re-keyed to `sleep:<userId>:<day>`). Entries the old "I'm awake" button made
@@ -27,7 +28,19 @@ import { rebuildAllMetrics } from '../services/analytics/freshness';
 type Val = { fieldKey: string; value: unknown };
 const val = (e: { answers?: Array<{ values?: Val[] }> }, key: string) => e.answers?.[0]?.values?.find(v => v.fieldKey === key)?.value;
 
-export async function migrateAnalytics(apply: boolean): Promise<Record<string, unknown>> {
+/** `--map "typed name=Medicine name"` pairs from the command line (case-insensitive). */
+export function parseNameMap(argv: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  argv.forEach((a, i) => {
+    const raw = a === '--map' ? argv[i + 1] : a.startsWith('--map=') ? a.slice(6) : null;
+    if (!raw || !raw.includes('=')) return;
+    const [from, to] = raw.split('=');
+    if (from.trim() && to.trim()) out.set(from.trim().toLowerCase(), to.trim().toLowerCase());
+  });
+  return out;
+}
+
+export async function migrateAnalytics(apply: boolean, nameMap: Map<string, string> = new Map()): Promise<Record<string, unknown>> {
   const report: Record<string, unknown> = { apply };
   const users = await User.find({}).select('_id').lean();
   let sleepDeleted = 0, sleepInvented = 0, sleepRekeyed = 0, sessionsMoved = 0, sessionsMerged = 0, dosesImported = 0;
@@ -112,10 +125,12 @@ export async function migrateAnalytics(apply: boolean): Promise<Record<string, u
           if (!status) continue;
           const name = String((a.values ?? []).find(v => v.fieldKey === 'name')?.value ?? '').trim().toLowerCase();
           if (!name) continue;
-          const matches = byName.get(name) ?? [];
+          const matches = byName.get(nameMap.get(name) ?? name) ?? [];
           if (matches.length !== 1) { unmatched.set(name, (unmatched.get(name) ?? 0) + 1); continue; }
           const med = matches[0];
           const clientId = `import:${e._id}:${a.optionId}`;
+          // Already imported on an earlier run: nothing to do (and not counted again).
+          if (await DoseEvent.exists({ userId: uid, clientId })) continue;
           dosesImported++;
           if (apply) {
             const at = new Date(e.occurredAt);
@@ -140,6 +155,7 @@ export async function migrateAnalytics(apply: boolean): Promise<Record<string, u
     users: users.length, sleepDuplicatesRemoved: sleepDeleted, inventedSleepRemoved: sleepInvented, sleepRekeyed,
     sessionsMoved, sessionsMerged, dosesImported,
     unmatchedMedicineNames: [...unmatched.entries()].map(([name, n]) => `${name} (${n})`),
+    hint: unmatched.size ? 'Map them with --map "typed name=Medicine name" and run again; already imported doses are not duplicated.' : undefined,
   });
   return report;
 }
@@ -151,7 +167,7 @@ if (require.main === module) {
   const uri = process.env.MONGO_URI ?? process.env.MONGODB_URI;
   if (!uri) { console.error('MONGO_URI is not set'); process.exit(1); }
   mongoose.connect(uri)
-    .then(() => migrateAnalytics(apply))
+    .then(() => migrateAnalytics(apply, parseNameMap(process.argv.slice(2))))
     .then(r => { console.log(JSON.stringify(r, null, 2)); return mongoose.disconnect(); })
     .catch(err => { console.error(err); process.exit(1); });
 }

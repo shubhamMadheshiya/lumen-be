@@ -348,7 +348,8 @@ configRouter.post('/questions', validate(CreateQuestionSchema), async (req: Auth
   try {
     const userId = uid(req);
     const count = await Question.countDocuments({ userId, categoryId: req.body.categoryId });
-    const doc = await Question.create({ ...req.body, userId, order: req.body.order ?? count, version: 1 });
+    const { metricRole, ...qBody } = req.body;
+    const doc = await Question.create({ ...qBody, ...(metricRole !== 'auto' && metricRole !== undefined ? { metricRole } : {}), userId, order: req.body.order ?? count, version: 1 });
     await bumpConfig(req.userId!);
     res.status(201).json({ success: true, data: doc });
   } catch (err) { next(err); }
@@ -372,9 +373,16 @@ configRouter.patch('/questions/reorder', validate(ReorderSchema), async (req: Au
   } catch (err) { next(err); }
 });
 
+/** 'auto' means "let Lumen guess again": the stored choice is removed. */
+function metricRoleUpdate(body: Record<string, unknown>): Record<string, unknown> {
+  if (body.metricRole !== 'auto') return body;
+  const { metricRole: _drop, ...rest } = body;
+  return { ...rest, $unset: { metricRole: 1 } };
+}
+
 configRouter.patch('/questions/:id', validate(UpdateQuestionSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const update = { ...req.body, $inc: { version: 1 } };
+    const update = { ...metricRoleUpdate(req.body), $inc: { version: 1 } };
     const doc = await Question.findOneAndUpdate(
       { _id: req.params.id, userId: uid(req) },
       update,
@@ -499,6 +507,24 @@ configRouter.patch('/options/:id', validate(UpdateOptionSchema), async (req: Aut
     if (body.captureTime === 'auto_now' || body.captureTime === 'auto') {
       body.captureTime = 'user_picks';
     }
+    // "Count as the same as…": always point at the final option, never at itself or in a loop.
+    if (body.mergedInto !== undefined) {
+      if (body.mergedInto === null) {
+        delete body.mergedInto;
+        await Option.updateOne({ _id: existing._id }, { $unset: { mergedInto: 1 } });
+      } else {
+        let target = await Option.findOne({ _id: body.mergedInto, userId: uid(req) }).select('mergedInto').lean();
+        const seen = new Set<string>([String(existing._id)]);
+        while (target?.mergedInto && !seen.has(String(target._id))) {
+          seen.add(String(target._id));
+          target = await Option.findOne({ _id: target.mergedInto, userId: uid(req) }).select('mergedInto').lean();
+        }
+        if (!target || String(target._id) === String(existing._id)) throw AppError.badRequest('Pick a different option to count this as.');
+        body.mergedInto = target._id;
+        // Options already merged into this one follow it to the new target.
+        await Option.updateMany({ userId: uid(req), mergedInto: existing._id }, { $set: { mergedInto: target._id } });
+      }
+    }
 
     const doc = await Option.findOneAndUpdate(
       { _id: req.params.id, userId: uid(req) },
@@ -576,7 +602,8 @@ configRouter.post('/quick-actions', validate(CreateQuickActionSchema), async (re
   try {
     const userId = uid(req);
     const count = await QuickAction.countDocuments({ userId });
-    const doc = await QuickAction.create({ ...req.body, userId, order: req.body.order ?? count });
+    const { metricRole, ...qaBody } = req.body;
+    const doc = await QuickAction.create({ ...qaBody, ...(metricRole !== 'auto' && metricRole !== undefined ? { metricRole } : {}), userId, order: req.body.order ?? count });
     await bumpConfig(req.userId!);
     res.status(201).json({ success: true, data: doc });
   } catch (err) { next(err); }
@@ -602,7 +629,7 @@ configRouter.patch('/quick-actions/:id', validate(UpdateQuickActionSchema), asyn
   try {
     const doc = await QuickAction.findOneAndUpdate(
       { _id: req.params.id, userId: uid(req) },
-      req.body,
+      metricRoleUpdate(req.body),
       { new: true },
     );
     if (!doc) throw AppError.notFound();

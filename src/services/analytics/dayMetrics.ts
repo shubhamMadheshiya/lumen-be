@@ -49,6 +49,8 @@ export interface MetricInput {
   questions: Map<string, QuestionInfo>;
   /** optionId → categoryId, so an option and its own category are known to be the same thing. */
   optionCategory: Map<string, string>;
+  /** Duplicate option → the option it is counted as ("Count as the same as…"). */
+  optionMerge?: Map<string, string>;
   steps: Map<string, number>;
   walkMinutes: Map<string, number>;
   exerciseMinutes: Map<string, number>;
@@ -300,8 +302,9 @@ function buildDay(dayKey: string, list: Placed[], input: MetricInput): DayMetric
       if (!optId || optId.includes(':')) continue;
 
       if (p.isSymptom && range !== null) { severities.push(range); entrySevs.push(range); }
-      const group = input.optionCategory.get(optId) ?? e.categoryId ?? 'none';
-      const it = item(`opt_${optId}`, a.optionLabelSnapshot || 'Item', group, p.isSymptom);
+      const keyId = input.optionMerge?.get(optId) ?? optId;
+      const group = input.optionCategory.get(keyId) ?? input.optionCategory.get(optId) ?? e.categoryId ?? 'none';
+      const it = item(`opt_${keyId}`, a.optionLabelSnapshot || 'Item', group, p.isSymptom);
       touch(it, p, p.isSymptom ? range : range);
       const amount = answerAmount(a.values);
       addAmount(it, amount);

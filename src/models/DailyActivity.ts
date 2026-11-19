@@ -1,9 +1,9 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-/** One row per user per local day: the step total the phone counted on its own. */
+/** One row per user per Lumen day: the step total the phone counted between two day boundaries. */
 export interface IDailyActivityDoc extends Document {
   userId: mongoose.Types.ObjectId;
-  date: string; // YYYY-MM-DD in the user's local time
+  date: string; // YYYY-MM-DD Lumen day (the app sums steps from one Day Reset Boundary to the next)
   steps: number;
   source: 'ios_motion' | 'health_connect';
   createdAt: Date;
