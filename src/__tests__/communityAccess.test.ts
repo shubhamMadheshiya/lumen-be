@@ -379,4 +379,43 @@ describe('community routes', () => {
       expect(res.status).toBe(403);
     });
   });
+
+  describe('finding someone to message', () => {
+    const friend = oid();
+    const blocked = oid();
+    const blocker = oid();
+    const anonymousPoster = oid();
+    const lean = <T,>(rows: T[]) => ({ select: () => ({ limit: () => ({ lean: async () => rows }), lean: async () => rows }) });
+
+    beforeEach(() => {
+      jest.spyOn(CommunityServer, 'find').mockImplementation((() => ({
+        select: () => ({ limit: () => ({ lean: async () => [{ _id: oid(), ownerId: other, memberIds: [me, friend, blocked, blocker] }] }) }),
+      })) as never);
+      jest.spyOn(CommunityChannel, 'find').mockImplementation((() => lean([{ _id: oid() }])) as never);
+      jest.spyOn(CommunityMessage, 'distinct').mockResolvedValue([anonymousPoster, friend] as never);
+      jest.spyOn(CommunityBlock, 'find').mockImplementation(((f: { userId?: unknown; blockedUserId?: unknown }) =>
+        f.userId ? lean([{ blockedUserId: blocked }]) : lean([{ userId: blocker }])) as never);
+    });
+
+    it('searches only visible, non-blocked people, and never the caller', async () => {
+      const userFind = jest.spyOn(User, 'find').mockImplementation((() => lean([{ _id: friend, name: 'Ravi Kumar' }])) as never);
+      const res = await as(request(app).get('/community/people?q=ravi'));
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual([{ userId: String(friend), displayName: 'Ravi Kumar' }]);
+      const filter = (userFind.mock.calls as unknown as unknown[][])[0][0] as { _id: { $in: string[] } };
+      expect(filter._id.$in).toEqual(expect.arrayContaining([String(friend), String(other)]));
+      expect(filter._id.$in).not.toContain(String(me));
+      expect(filter._id.$in).not.toContain(String(blocked));
+      expect(filter._id.$in).not.toContain(String(blocker));
+    });
+
+    it('needs at least two letters and treats the text as plain text, not a pattern', async () => {
+      const userFind = jest.spyOn(User, 'find').mockImplementation((() => lean([])) as never);
+      expect((await as(request(app).get('/community/people?q=r'))).body.data).toEqual([]);
+      expect(userFind).not.toHaveBeenCalled();
+      await as(request(app).get('/community/people?q=.*'));
+      const filter = (userFind.mock.calls as unknown as unknown[][])[0][0] as { name: { $regex: string } };
+      expect(filter.name.$regex).toBe('\\.\\*');
+    });
+  });
 });

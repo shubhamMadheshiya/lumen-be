@@ -1361,6 +1361,54 @@ communityChatRouter.get(
 
 // ────────── Direct Messages (DMs) API ──────────
 
+// GET /api/v1/community/people?q=name - find someone to message, without opening a channel first.
+// Only people the member could already see in the community: members of communities they can open, and
+// people who posted under their own name in those channels. Never anonymous posters, never blocked people.
+communityChatRouter.get('/people', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const q = String(req.query.q ?? '').trim().slice(0, 40);
+    if (q.length < 2) return res.json({ success: true, data: [] });
+    const me = uid(req);
+
+    const servers = await CommunityServer.find({ $or: [{ isOfficial: true }, { isPrivate: false }, { memberIds: me }] })
+      .select('_id memberIds ownerId')
+      .limit(200)
+      .lean();
+    const channelIds = (await CommunityChannel.find({ serverId: { $in: servers.map((s) => s._id) }, type: { $ne: 'dm' } }).select('_id').limit(500).lean()).map((c) => c._id);
+    const posters = await CommunityMessage.distinct('senderId', {
+      channelId: { $in: channelIds },
+      isAnonymous: false,
+      createdAt: { $gte: new Date(Date.now() - 60 * 86_400_000) },
+    });
+
+    const candidates = new Set<string>();
+    servers.forEach((s) => {
+      candidates.add(String(s.ownerId));
+      (s.memberIds ?? []).forEach((m) => candidates.add(String(m)));
+    });
+    posters.forEach((p: unknown) => candidates.add(String(p)));
+    candidates.delete(me.toString());
+
+    const [mine, blockedMe] = await Promise.all([
+      blockedUserIds(me),
+      CommunityBlock.find({ blockedUserId: me }).select('userId').lean(),
+    ]);
+    [...mine, ...blockedMe.map((b) => b.userId)].forEach((id) => candidates.delete(String(id)));
+
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const ids = Array.from(candidates).filter((id) => mongoose.Types.ObjectId.isValid(id)).slice(0, 1000);
+    const users = ids.length
+      ? await User.find({ _id: { $in: ids }, name: { $regex: escaped, $options: 'i' } }).select('name').limit(20).lean()
+      : [];
+    res.json({
+      success: true,
+      data: users.map((u) => ({ userId: String(u._id), displayName: u.name || 'Lumen Member' })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/v1/community/dms - List all 1-on-1 DMs for current user
 communityChatRouter.get(
   '/dms',
