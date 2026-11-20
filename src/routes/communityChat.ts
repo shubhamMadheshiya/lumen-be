@@ -1499,7 +1499,9 @@ communityChatRouter.get(
             lastReadMessageId: readState?.lastReadMessageId?.toString(),
           };
           // Group photo link, description and my own mute switch (nobody else's).
-          return c.isGroup ? await withGroupExtras(base, userId.toString()) : base;
+          if (c.isGroup) return await withGroupExtras(base, userId.toString());
+          const { mutedBy: _unused, photoMediaId: _photo, ...oneOnOne } = base as any;
+          return oneOnOne;
         })
       );
 
