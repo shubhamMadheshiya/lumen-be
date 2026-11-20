@@ -42,16 +42,16 @@ export function communityPushAllowed(
   return true;
 }
 
-export function pushText(reason: PushReason, channelName: string, senderName: string, content: string, hasVoice: boolean, hasWarning = false) {
+export function pushText(reason: PushReason, channelName: string, senderName: string, content: string, hasVoice: boolean, hasWarning = false, isGroup = false) {
   // A content warning means the text is hidden in the app, so it stays out of the notification too.
   const body = hasWarning ? 'Message with a content warning' : makeSnippet(content || (hasVoice ? 'Sent a voice note' : ''));
-  if (reason === 'dm') return { title: senderName, body };
+  if (reason === 'dm') return { title: isGroup ? `${senderName} in ${channelName}` : senderName, body };
   if (reason === 'reply') return { title: `${senderName} replied to you`, body: `#${channelName}: ${body}` };
   return { title: `${senderName} mentioned you`, body: `#${channelName}: ${body}` };
 }
 
 export async function notifyCommunityMessage(args: {
-  channel: { _id: unknown; slug: string; name: string; type?: string; dmMemberIds?: unknown[] };
+  channel: { _id: unknown; slug: string; name: string; type?: string; dmMemberIds?: unknown[]; isGroup?: boolean; mutedBy?: unknown[] };
   message: { content?: string; contentWarning?: string; audioUrl?: string; audioMediaId?: unknown; isAnonymous?: boolean; senderDisplayName: string; mentions?: string[] };
   senderId: string;
   replyToMessageId?: unknown;
@@ -79,11 +79,13 @@ export async function notifyCommunityMessage(args: {
     });
 
     const sender = message.isAnonymous ? 'Someone' : message.senderDisplayName;
+    const mutedIds = new Set((channel.mutedBy ?? []).map(String));
     for (const [userId, reason] of recipients) {
+      if (mutedIds.has(userId)) continue; // this person muted the group
       if (!(await args.canSee(userId))) continue;
       const prefs = await User.findById(userId).select('preferences.communityPush preferences.communityQuiet preferences.timezone').lean();
       if (!communityPushAllowed(prefs?.preferences as Parameters<typeof communityPushAllowed>[0])) continue;
-      const text = pushText(reason, channel.name, sender, message.content ?? '', Boolean(message.audioUrl || message.audioMediaId), Boolean(message.contentWarning));
+      const text = pushText(reason, channel.name, sender, message.content ?? '', Boolean(message.audioUrl || message.audioMediaId), Boolean(message.contentWarning), Boolean(channel.isGroup));
       await sendToUser(userId, {
         ...text,
         channelId: CHANNEL_COMMUNITY,

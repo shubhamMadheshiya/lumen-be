@@ -11,6 +11,12 @@ export interface ICommunityChannelDoc extends Document {
   category: string;
   type: 'text' | 'forum' | 'announcement' | 'dm';
   dmMemberIds?: mongoose.Types.ObjectId[];
+  /** A chat with 3 or more people (type stays 'dm'). The owner is `dmInitiatorId`; status is always accepted. */
+  isGroup?: boolean;
+  /** Group description, group photo (a Media id of an image a member uploaded) and who muted it. */
+  about?: string;
+  photoMediaId?: mongoose.Types.ObjectId;
+  mutedBy?: mongoose.Types.ObjectId[];
   /** Who started the DM; a DM from a stranger stays a request until the other person accepts. */
   dmInitiatorId?: mongoose.Types.ObjectId;
   dmStatus?: 'pending' | 'accepted' | 'declined';
@@ -36,6 +42,10 @@ const CommunityChannelSchema = new Schema<ICommunityChannelDoc>(
     category: { type: String, default: 'CONDITION HUBS', index: true },
     type: { type: String, enum: ['text', 'forum', 'announcement', 'dm'], default: 'text' },
     dmMemberIds: [{ type: Schema.Types.ObjectId, ref: 'User', index: true }],
+    isGroup: { type: Boolean, default: undefined },
+    about: { type: String, maxlength: 300 },
+    photoMediaId: { type: Schema.Types.ObjectId, ref: 'Media' },
+    mutedBy: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     dmInitiatorId: { type: Schema.Types.ObjectId, ref: 'User' },
     dmStatus: { type: String, enum: ['pending', 'accepted', 'declined'] },
     slowModeSeconds: { type: Number, default: 0, min: 0, max: 21600 },

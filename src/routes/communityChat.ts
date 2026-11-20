@@ -14,6 +14,7 @@ import { Media } from '../models/Media';
 import { CommunityBlock } from '../models/CommunityBlock';
 import { CommunityReport, ReportReason } from '../models/CommunityReport';
 import { getDownloadUrl } from '../utils/s3';
+import { withGroupExtras } from '../services/groupExtras';
 import { notifyCommunityMessage } from '../services/communityPush';
 import { runAssistant } from '../services/llm/assistant/assistant';
 import { createDraft, draftPayload } from '../services/templates/aiTemplateDraft';
@@ -26,6 +27,7 @@ import {
   broadcastMessageDeleted,
   broadcastReactionUpdated,
   broadcastPinsUpdated,
+  isUserOnline,
 } from '../services/socketService';
 import {
   CreateCommunityMessageSchema,
@@ -897,7 +899,7 @@ communityChatRouter.post(
       const {
         content,
         contentWarning,
-        isAnonymous,
+        isAnonymous: askedAnonymous,
         senderAvatarEmoji,
         senderRoleColor,
         senderRoleBadges,
@@ -921,8 +923,10 @@ communityChatRouter.post(
       // Validate channel and access
       const targetChannel: any = await accessibleChannel(req, res, channelId);
       if (!targetChannel) return;
+      // A private group is people who know each other: messages there always carry the sender's name.
+      const isAnonymous = Boolean(askedAnonymous) && !targetChannel.isGroup;
 
-      if (targetChannel.type === 'dm') {
+      if (targetChannel.type === 'dm' && !targetChannel.isGroup) {
         const peer = (targetChannel.dmMemberIds ?? []).find((m: any) => String(m) !== userId.toString());
         if (peer && (await eitherBlocked(userId, peer))) {
           return res.status(403).json({ success: false, message: 'You cannot message this person' });
@@ -931,7 +935,7 @@ communityChatRouter.post(
 
       // A DM from someone new is a request: a few messages are allowed, then they wait for it to be accepted.
       let dmPending = false;
-      if (targetChannel.type === 'dm') {
+      if (targetChannel.type === 'dm' && !targetChannel.isGroup) {
         const iStarted = String(targetChannel.dmInitiatorId ?? '') === userId.toString();
         const status = targetChannel.dmStatus ?? 'accepted';
         if (status === 'declined' && iStarted) {
@@ -1423,10 +1427,19 @@ communityChatRouter.get(
         .sort({ updatedAt: -1 })
         .lean();
 
-      // Enrich with target user profile
+      // Enrich with target user profile, last message snippet, and unread count
       const enriched = await Promise.all(
         dmChannels.map(async (c: any) => {
-          const targetUserId = (c.dmMemberIds || []).find((id: any) => id.toString() !== userId.toString());
+          const targetUserId = c.isGroup ? undefined : (c.dmMemberIds || []).find((id: any) => id.toString() !== userId.toString());
+          let groupMembers: any[] | undefined;
+          if (c.isGroup) {
+            const people = await User.find({ _id: { $in: c.dmMemberIds || [] } }).select('name').lean();
+            const names = new Map(people.map((p: any) => [String(p._id), p.name || 'Lumen Member']));
+            groupMembers = (c.dmMemberIds || []).map((id: any) => ({
+              _id: String(id), displayName: names.get(String(id)) ?? 'Lumen Member',
+              isOwner: String(id) === String(c.dmInitiatorId), isMe: String(id) === userId.toString(),
+            }));
+          }
           let dmUser: any = null;
           if (targetUserId) {
             const u = await User.findById(targetUserId).lean();
@@ -1435,6 +1448,7 @@ communityChatRouter.get(
                 _id: u._id.toString(),
                 displayName: u.name || 'Lumen Member',
                 avatarEmoji: '🌟',
+                isOnline: isUserOnline(u._id.toString()),
               };
             }
           }
@@ -1442,13 +1456,50 @@ communityChatRouter.get(
           // Fetch read state
           const readState = await ChannelReadState.findOne({ userId, channelId: c._id });
 
-          return {
+          // Fetch last message for conversation card snippet
+          const lastMsg = await CommunityMessage.findOne({ channelId: c._id })
+            .sort({ createdAt: -1 })
+            .lean();
+
+          let lastMessageData: any = null;
+          if (lastMsg) {
+            const isSelf = String(lastMsg.senderId) === String(userId);
+            let snippet = lastMsg.content || '';
+            if (lastMsg.embedType === 'note') snippet = `Shared a note: ${lastMsg.embedData?.note?.title || 'Note'}`;
+            else if (lastMsg.embedType === 'todo_list') snippet = `Shared a task list: ${lastMsg.embedData?.todo?.listName || 'List'}`;
+            else if (lastMsg.embedType === 'log_template') snippet = `Shared a template: ${lastMsg.embedData?.logTemplate?.title || 'Template'}`;
+            else if (lastMsg.embedType === 'photo') snippet = 'Shared a photo';
+
+            lastMessageData = {
+              _id: lastMsg._id.toString(),
+              content: snippet,
+              senderId: lastMsg.senderId.toString(),
+              senderDisplayName: lastMsg.senderDisplayName,
+              isSelf,
+              createdAt: lastMsg.createdAt,
+            };
+          }
+
+          let unreadCount = 0;
+          if (readState?.lastReadMessageId) {
+            unreadCount = await CommunityMessage.countDocuments({
+              channelId: c._id,
+              _id: { $gt: readState.lastReadMessageId },
+            });
+          }
+
+          const base = {
             ...c,
             _id: c._id.toString(),
-            name: dmUser?.displayName || c.name,
+            name: c.isGroup ? c.name : dmUser?.displayName || c.name,
             dmUser,
+            ...(groupMembers ? { groupMembers } : {}),
+            lastMessage: lastMessageData,
+            unreadCount,
             lastReadMessageId: readState?.lastReadMessageId?.toString(),
           };
+          // Group photo link, description and my own mute switch (nobody else's).
+          return c.isGroup ? await withGroupExtras(base, userId.toString()) : base;
         })
       );
 
@@ -1485,6 +1536,7 @@ communityChatRouter.post(
       // Check existing DM
       let dmChannel = await CommunityChannel.findOne({
         type: 'dm',
+        isGroup: { $ne: true },
         dmMemberIds: { $all: [userId, targetObjectId], $size: 2 },
       });
 
@@ -1686,7 +1738,7 @@ for (const action of ['accept', 'decline'] as const) {
   communityChatRouter.post(`/dms/:channelId/${action}`, async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const channel = await accessibleChannel(req, res, req.params.channelId);
-      if (!channel || channel.type !== 'dm') {
+      if (!channel || channel.type !== 'dm' || channel.isGroup) {
         if (channel) res.status(404).json({ success: false, message: 'Channel not found' });
         return;
       }

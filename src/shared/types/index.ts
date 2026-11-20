@@ -829,6 +829,8 @@ export interface ICommunityMessage {
   senderDisplayName: string;
   senderAvatarEmoji?: string;
   isAnonymous: boolean;
+  /** A notice such as "Ana added Cy", drawn centred instead of as a person's message. */
+  isSystem?: boolean;
   content: string;
   isEdited?: boolean;
   editedAt?: string;
@@ -903,13 +905,25 @@ export interface ICommunityChannel {
     _id: string;
     displayName: string;
     avatarEmoji?: string;
+    isOnline?: boolean;
   };
   order: number;
   memberCount: number;
   messageCount: number;
   isFeatured: boolean;
   unreadCount?: number;
+  slowModeSeconds?: number;
+  dmStatus?: 'pending' | 'accepted' | 'declined';
+  dmInitiatorId?: string;
   lastReadMessageId?: string;
+  lastMessage?: {
+    _id: string;
+    content: string;
+    senderId?: string;
+    senderDisplayName?: string;
+    isSelf?: boolean;
+    createdAt?: string;
+  } | null;
   createdAt: string;
 }
 

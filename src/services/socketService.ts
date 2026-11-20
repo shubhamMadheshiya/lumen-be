@@ -116,6 +116,12 @@ export function getIO(): SocketIOServer | null {
   return ioInstance;
 }
 
+export function isUserOnline(userId: string): boolean {
+  if (!ioInstance) return false;
+  const room = ioInstance.sockets.adapter.rooms.get(`user:${userId}`);
+  return !!room && room.size > 0;
+}
+
 export function broadcastMessageCreated(channelId: string, message: any, dmUserIds?: string[]): void {
   if (!ioInstance) return;
   ioInstance.to(`channel:${channelId}`).emit('message_created', {

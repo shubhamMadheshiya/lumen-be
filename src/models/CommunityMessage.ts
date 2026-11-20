@@ -14,6 +14,8 @@ export interface ICommunityMessageDoc extends Document {
   senderRoleColor?: string;
   senderRoleBadges?: string[];
   isAnonymous: boolean;
+  /** A notice such as "Ana added Cy" shown in the middle of the chat, not a person's message. */
+  isSystem?: boolean;
   content: string;
   contentWarning?: string;
   isEdited?: boolean;
@@ -61,6 +63,7 @@ const CommunityMessageSchema = new Schema<ICommunityMessageDoc>(
     senderRoleColor: { type: String, default: '#38BDF8', maxlength: 20 },
     senderRoleBadges: { type: [String], default: [] },
     isAnonymous: { type: Boolean, default: false },
+    isSystem: { type: Boolean, default: false },
     content: { type: String, maxlength: 3000, default: '' },
     contentWarning: { type: String, maxlength: 60 },
     isEdited: { type: Boolean, default: false },
