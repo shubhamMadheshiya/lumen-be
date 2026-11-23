@@ -7,14 +7,15 @@ import { Media } from '../models/Media';
 
 export const MAX_PHOTOS = 10;
 
-/** GIF links are only accepted from these hosts (Tenor's media servers), over https. */
-export const GIF_HOSTS = new Set(['media.tenor.com', 'media1.tenor.com', 'c.tenor.com']);
+/** GIF links are only accepted from the GIF service's own media servers (GIPHY), over https. */
+const GIF_HOST = /^(media\d{0,2}|i)\.giphy\.com$/;
+export const isGifHost = (host: string) => GIF_HOST.test(host);
 
 export function isAllowedGifUrl(url: unknown): url is string {
   if (typeof url !== 'string' || url.length > 600) return false;
   try {
     const u = new URL(url);
-    return u.protocol === 'https:' && GIF_HOSTS.has(u.hostname);
+    return u.protocol === 'https:' && isGifHost(u.hostname);
   } catch {
     return false;
   }

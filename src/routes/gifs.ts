@@ -6,7 +6,7 @@ import { Router, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { AppError } from '../utils/errors';
-import { trending, search, GifNotConfigured } from '../services/gifs/tenor';
+import { trending, search, GifNotConfigured } from '../services/gifs/giphy';
 
 export const gifRouter = Router();
 gifRouter.use(authenticate);

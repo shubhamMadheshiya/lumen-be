@@ -1,10 +1,10 @@
 import mongoose from 'mongoose';
 import { Media } from '../models/Media';
 import { checkPhotoEmbed, checkGifEmbed, isAllowedGifUrl, mediaIdsOf, MAX_PHOTOS } from '../services/chatEmbeds';
-import { parseTenor, search, trending, _clearGifCache, GifNotConfigured } from '../services/gifs/tenor';
+import { parseGiphy, search, trending, _clearGifCache, GifNotConfigured } from '../services/gifs/giphy';
 
 const oid = () => new mongoose.Types.ObjectId();
-afterEach(() => { jest.restoreAllMocks(); delete process.env.TENOR_API_KEY; _clearGifCache(); });
+afterEach(() => { jest.restoreAllMocks(); delete process.env.GIPHY_API_KEY; _clearGifCache(); });
 
 const mockOwned = (docs: Array<{ _id: mongoose.Types.ObjectId; mimeType: string }>) =>
   jest.spyOn(Media, 'find').mockImplementation((() => ({ select: async () => docs })) as never);
@@ -54,46 +54,60 @@ describe('photos in a chat message', () => {
 
 describe('GIFs in a chat message', () => {
   it('only accepts https links on the GIF service hosts', () => {
-    expect(isAllowedGifUrl('https://media.tenor.com/abc/x.gif')).toBe(true);
-    expect(isAllowedGifUrl('https://media1.tenor.com/m/abc/x.gif')).toBe(true);
-    expect(isAllowedGifUrl('http://media.tenor.com/abc.gif')).toBe(false);
-    expect(isAllowedGifUrl('https://evil.example.com/tenor.com/x.gif')).toBe(false);
-    expect(isAllowedGifUrl('https://media.tenor.com.evil.com/x.gif')).toBe(false);
+    expect(isAllowedGifUrl('https://media2.giphy.com/media/abc/giphy.gif')).toBe(true);
+    expect(isAllowedGifUrl('https://media.giphy.com/media/abc/giphy.gif')).toBe(true);
+    expect(isAllowedGifUrl('https://i.giphy.com/abc.gif')).toBe(true);
+    expect(isAllowedGifUrl('http://media2.giphy.com/abc.gif')).toBe(false);
+    expect(isAllowedGifUrl('https://media.tenor.com/abc.gif')).toBe(false); // that service is gone
+    expect(isAllowedGifUrl('https://evil.example.com/giphy.com/x.gif')).toBe(false);
+    expect(isAllowedGifUrl('https://media2.giphy.com.evil.com/x.gif')).toBe(false);
+    expect(isAllowedGifUrl('https://mediagiphy.com/x.gif')).toBe(false);
     expect(isAllowedGifUrl('javascript:alert(1)')).toBe(false);
     expect(isAllowedGifUrl(undefined)).toBe(false);
   });
 
   it('keeps only the known fields, and drops a preview from an unknown host', () => {
-    const r = checkGifEmbed({ gifUrl: 'https://media.tenor.com/a.gif', previewUrl: 'https://evil.com/p.gif', width: 320, height: 240, gifId: 'g1', extra: 'x' });
-    expect(r).toEqual({ ok: true, embedData: { gifUrl: 'https://media.tenor.com/a.gif', width: 320, height: 240, gifId: 'g1' } });
+    const r = checkGifEmbed({ gifUrl: 'https://media2.giphy.com/a.gif', previewUrl: 'https://evil.com/p.gif', width: 320, height: 240, gifId: 'g1', extra: 'x' });
+    expect(r).toEqual({ ok: true, embedData: { gifUrl: 'https://media2.giphy.com/a.gif', width: 320, height: 240, gifId: 'g1' } });
     expect(checkGifEmbed({ gifUrl: 'https://evil.com/a.gif' }).ok).toBe(false);
   });
 });
 
-describe('Tenor proxy', () => {
+describe('GIF search proxy (GIPHY)', () => {
   const reply = {
-    results: [
-      { id: '1', content_description: 'cat dancing', media_formats: { gif: { url: 'https://media.tenor.com/a.gif', dims: [498, 280] }, tinygif: { url: 'https://media.tenor.com/a_tiny.gif', dims: [220, 124] } } },
-      { id: '2', media_formats: { gif: { url: 'https://evil.com/b.gif', dims: [1, 1] }, tinygif: { url: 'https://evil.com/b_t.gif' } } },
-      { id: '3', media_formats: {} },
+    data: [
+      { id: 'a1', title: 'cat dancing', images: {
+        downsized_medium: { url: 'https://media2.giphy.com/media/a1/giphy-downsized-medium.gif', width: '480', height: '270' },
+        original: { url: 'https://media2.giphy.com/media/a1/giphy.gif', width: '500', height: '281' },
+        fixed_width_small: { url: 'https://media2.giphy.com/media/a1/100w.gif', width: '100', height: '56' } } },
+      { id: 'a2', title: 'no small version', images: { original: { url: 'https://media3.giphy.com/media/a2/giphy.gif', width: '300', height: '300' } } },
+      { id: 'bad', title: 'other host', images: { original: { url: 'https://evil.example.com/b.gif' }, fixed_width_small: { url: 'https://evil.example.com/b_s.gif' } } },
+      { id: 'none', images: {} },
     ],
-    next: 'CAoQ',
+    pagination: { total_count: 90, count: 24, offset: 0 },
   };
   const fakeFetch = (body: unknown = reply, ok = true) => jest.fn(async () => ({ ok, status: ok ? 200 : 500, json: async () => body })) as unknown as typeof fetch;
 
-  it('reads the answer into our shape and skips results from other hosts', () => {
-    const page = parseTenor(reply);
-    expect(page.next).toBe('CAoQ');
-    expect(page.results).toEqual([{ id: '1', previewUrl: 'https://media.tenor.com/a_tiny.gif', url: 'https://media.tenor.com/a.gif', width: 498, height: 280, description: 'cat dancing' }]);
-    expect(parseTenor({})).toEqual({ results: [], next: null });
+  it('reads the answer into our shape, prefers a message-sized GIF, and skips other hosts', () => {
+    const page = parseGiphy(reply);
+    expect(page.results.map((r) => r.id)).toEqual(['a1', 'a2']);
+    expect(page.results[0]).toEqual({ id: 'a1', previewUrl: 'https://media2.giphy.com/media/a1/100w.gif', url: 'https://media2.giphy.com/media/a1/giphy-downsized-medium.gif', width: 480, height: 270, description: 'cat dancing' });
+    expect(page.results[1].previewUrl).toBe(page.results[1].url); // no small version: use the GIF itself
+    expect(page.next).toBe('24');
+    expect(parseGiphy({})).toEqual({ results: [], next: null });
+  });
+
+  it('stops paging at the last page', () => {
+    expect(parseGiphy({ data: [], pagination: { total_count: 30, count: 6, offset: 24 } }).next).toBeNull();
+    expect(parseGiphy({ data: [], pagination: { total_count: 30, count: 0, offset: 24 } }).next).toBeNull();
   });
 
   it('says it is not set up when there is no key', async () => {
     await expect(trending(undefined, fakeFetch())).rejects.toBeInstanceOf(GifNotConfigured);
   });
 
-  it('searches with the key, asks for small previews, and caches the answer', async () => {
-    process.env.TENOR_API_KEY = 'secret-key';
+  it('searches with the key, family-friendly rating, and caches the answer', async () => {
+    process.env.GIPHY_API_KEY = 'secret-key';
     const f = fakeFetch();
     const one = await search('happy cat', undefined, f);
     const two = await search('happy cat', undefined, f);
@@ -102,12 +116,22 @@ describe('Tenor proxy', () => {
     const url = String((f as jest.Mock).mock.calls[0][0]);
     expect(url).toContain('/search?');
     expect(url).toContain('q=happy+cat');
-    expect(url).toContain('media_filter=tinygif%2Cgif');
-    expect(url).toContain('contentfilter=medium');
+    expect(url).toContain('rating=pg');
+    expect(url).toContain('api_key=secret-key');
+  });
+
+  it('pages with an offset, and ignores a junk page value', async () => {
+    process.env.GIPHY_API_KEY = 'secret-key';
+    const f = fakeFetch();
+    await trending('24', f);
+    await trending('24; drop', f);
+    const urls = (f as jest.Mock).mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain('offset=24');
+    expect(urls[1]).not.toContain('offset');
   });
 
   it('fails clearly when the GIF service answers with an error', async () => {
-    process.env.TENOR_API_KEY = 'secret-key';
+    process.env.GIPHY_API_KEY = 'secret-key';
     await expect(trending(undefined, fakeFetch({}, false))).rejects.toThrow(/GIF service/);
   });
 });

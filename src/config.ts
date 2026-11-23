@@ -69,7 +69,7 @@ export const config = {
 
   /** Expo push (Lumen AI notifications). Only needed if push security is turned on in the Expo account. */
   expo: {
-    accessToken: optional('EXPO_ACCESS_TOKEN'),
+    accessToken: optional('EXPO_ACCESS_TOKEN', optional('EXPO_PUSH_TOKEN')),
   },
 
   isDev: optional('NODE_ENV', 'development') === 'development',
