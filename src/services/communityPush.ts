@@ -7,8 +7,23 @@ import { User } from '../models/User';
 import { sendToUser } from './push/pushService';
 import { makeSnippet } from './communityNotifications';
 import { isQuietAt, localMinutes } from './aiNotify/gate';
+import { isViewingChannel } from './socketService';
 
-export const CHANNEL_COMMUNITY = 'lumen_community_v1';
+// Android freezes a channel's importance and lock-screen setting once created, so these are new ids.
+/** HIGH (banner), sender and text visible on the lock screen. */
+export const CHANNEL_COMMUNITY_PUBLIC = 'lumen_community_v2';
+/** HIGH (banner), text hidden on the lock screen. */
+export const CHANNEL_COMMUNITY_PRIVATE = 'lumen_community_private_v2';
+export const CHANNEL_COMMUNITY = CHANNEL_COMMUNITY_PUBLIC;
+/** The notification action buttons (Reply, Mark as read) the app registers. */
+export const CATEGORY_COMMUNITY = 'lumen_category_community';
+
+/** Which channel and wording a push uses for a member who chose to show or hide text on the lock screen. */
+export function lockscreenChoice(showText: boolean, text: { title: string; body: string }): { channelId: string; title: string; body: string } {
+  return showText
+    ? { channelId: CHANNEL_COMMUNITY_PUBLIC, ...text }
+    : { channelId: CHANNEL_COMMUNITY_PRIVATE, title: 'Lumen', body: 'You have a new message' };
+}
 
 export type PushReason = 'dm' | 'reply' | 'mention';
 
@@ -42,9 +57,10 @@ export function communityPushAllowed(
   return true;
 }
 
-export function pushText(reason: PushReason, channelName: string, senderName: string, content: string, hasVoice: boolean, hasWarning = false, isGroup = false) {
+export function pushText(reason: PushReason, channelName: string, senderName: string, content: string, hasVoice: boolean, hasWarning = false, isGroup = false, embedType?: string) {
   // A content warning means the text is hidden in the app, so it stays out of the notification too.
-  const body = hasWarning ? 'Message with a content warning' : makeSnippet(content || (hasVoice ? 'Sent a voice note' : ''));
+  const media = embedType === 'photo' ? '📷 Photo' : embedType === 'gif' ? 'GIF' : '';
+  const body = hasWarning ? 'Message with a content warning' : makeSnippet(content || (hasVoice ? '🎤 Voice note' : media));
   if (reason === 'dm') return { title: isGroup ? `${senderName} in ${channelName}` : senderName, body };
   if (reason === 'reply') return { title: `${senderName} replied to you`, body: `#${channelName}: ${body}` };
   return { title: `${senderName} mentioned you`, body: `#${channelName}: ${body}` };
@@ -52,12 +68,14 @@ export function pushText(reason: PushReason, channelName: string, senderName: st
 
 export async function notifyCommunityMessage(args: {
   channel: { _id: unknown; slug: string; name: string; type?: string; dmMemberIds?: unknown[]; isGroup?: boolean; mutedBy?: unknown[] };
-  message: { content?: string; contentWarning?: string; audioUrl?: string; audioMediaId?: unknown; isAnonymous?: boolean; senderDisplayName: string; mentions?: string[] };
+  message: { _id?: unknown; content?: string; contentWarning?: string; audioUrl?: string; audioMediaId?: unknown; embedType?: string; isAnonymous?: boolean; senderDisplayName: string; mentions?: string[] };
   senderId: string;
   replyToMessageId?: unknown;
   /** A message request that the other person has not accepted yet: no push until they do. */
   dmPending?: boolean;
   canSee: (userId: string) => Promise<boolean>;
+  /** For tests: whether the person already has this chat open on screen. */
+  isViewing?: (userId: string, channelId: string) => boolean;
 }): Promise<void> {
   try {
     const { channel, message, senderId } = args;
@@ -83,13 +101,25 @@ export async function notifyCommunityMessage(args: {
     for (const [userId, reason] of recipients) {
       if (mutedIds.has(userId)) continue; // this person muted the group
       if (!(await args.canSee(userId))) continue;
-      const prefs = await User.findById(userId).select('preferences.communityPush preferences.communityQuiet preferences.timezone').lean();
+      const prefs = await User.findById(userId).select('preferences.communityPush preferences.communityQuiet preferences.communityLockscreenText preferences.timezone').lean();
       if (!communityPushAllowed(prefs?.preferences as Parameters<typeof communityPushAllowed>[0])) continue;
-      const text = pushText(reason, channel.name, sender, message.content ?? '', Boolean(message.audioUrl || message.audioMediaId), Boolean(message.contentWarning), Boolean(channel.isGroup));
+      // The chat is open on their screen right now: the message is already in front of them.
+      if ((args.isViewing ?? isViewingChannel)(userId, String(channel._id))) continue;
+      const hasMedia = Boolean(message.audioUrl || message.audioMediaId);
+      const text = pushText(reason, channel.name, sender, message.content ?? '', hasMedia, Boolean(message.contentWarning), Boolean(channel.isGroup), message.embedType);
+      const showText = (prefs?.preferences as { communityLockscreenText?: boolean } | undefined)?.communityLockscreenText !== false;
+      const choice = lockscreenChoice(showText, text);
       await sendToUser(userId, {
-        ...text,
-        channelId: CHANNEL_COMMUNITY,
-        data: { type: 'COMMUNITY', route: `/community/${channel.slug}` },
+        title: choice.title,
+        body: choice.body,
+        channelId: choice.channelId,
+        categoryId: CATEGORY_COMMUNITY,
+        data: {
+          type: 'COMMUNITY',
+          route: `/community/${channel.slug}`,
+          channelId: String(channel._id),
+          ...(message._id ? { messageId: String(message._id) } : {}),
+        },
       });
     }
   } catch (err) {

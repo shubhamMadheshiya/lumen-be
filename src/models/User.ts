@@ -47,6 +47,7 @@ export interface IUserDoc extends Document {
     weatherLocation?: { lat: number; lon: number; updatedAt: Date };
   };
   consentAcceptedAt?: Date;
+  lastSeenAt?: Date;
   configVersion: number;
   comparePassword(candidate: string): Promise<boolean>;
   createdAt: Date;
@@ -86,6 +87,12 @@ const UserSchema = new Schema<IUserDoc>(
       communityStatus: { type: String, maxlength: 60 },
       communityPush:   { type: Boolean },
       communityQuiet:  { type: Boolean },
+      /** Show the sender and text on the lock screen (like WhatsApp). Default on. */
+      communityLockscreenText: { type: Boolean },
+      /** Reciprocal: when off you neither send nor see "seen" ticks. Default on. */
+      communityReadReceipts: { type: Boolean },
+      /** Reciprocal: when off others don't see when you are online. Default on. */
+      communityShowOnline: { type: Boolean },
       aiJournalNoteId: { type: String },
       analyticsPins:   { type: [String], default: undefined },
       weatherLocation: {
@@ -94,6 +101,8 @@ const UserSchema = new Schema<IUserDoc>(
         updatedAt: { type: Date },
       },
     },
+    /** When the person was last connected to the chat server (shown as last seen, if they allow it). */
+    lastSeenAt:        { type: Date },
     consentAcceptedAt: { type: Date },
     configVersion:     { type: Number, default: 1 },
   },

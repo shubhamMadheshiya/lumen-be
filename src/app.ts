@@ -24,6 +24,7 @@ import { tasksRouter } from './routes/tasks';
 import { notesRouter } from './routes/notes';
 import { communityChatRouter } from './routes/communityChat';
 import { communityDmRouter } from './routes/communityDm';
+import { gifRouter } from './routes/gifs';
 import { notificationPolicyRouter } from './routes/notificationPolicy';
 import { recordsRouter } from './routes/records';
 import { aiRouter } from './routes/ai';
@@ -108,6 +109,7 @@ export function createApp(): Application {
   app.use(`${v1}/activity-sessions`, activitySessionsRouter);
   app.use(`${v1}/tasks`,             tasksRouter);
   app.use(`${v1}/notes`,             notesRouter);
+  app.use(`${v1}/community/gifs`,    gifRouter);
   app.use(`${v1}/community`,         communityDmRouter);
   app.use(`${v1}/community`,         communityChatRouter);
   app.use(`${v1}/notification-policy`, notificationPolicyRouter);

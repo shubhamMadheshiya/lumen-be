@@ -15,6 +15,10 @@ import { CommunityBlock } from '../models/CommunityBlock';
 import { CommunityReport, ReportReason } from '../models/CommunityReport';
 import { getDownloadUrl } from '../utils/s3';
 import { withGroupExtras } from '../services/groupExtras';
+import { checkPhotoEmbed, checkGifEmbed, mediaIdsOf } from '../services/chatEmbeds';
+import { markRead, markDelivered, receiptsFor, announceReceipt } from '../services/receipts';
+import { presenceFor } from '../services/presence';
+import { ForwardMessageSchema } from '../shared/schemas';
 import { notifyCommunityMessage } from '../services/communityPush';
 import { runAssistant } from '../services/llm/assistant/assistant';
 import { createDraft, draftPayload } from '../services/templates/aiTemplateDraft';
@@ -93,8 +97,7 @@ type MediaCarrier = {
 
 /** Voice notes and photos are stored by media id; the signed link is made fresh each time so it never goes stale. */
 async function withFreshAudio<T extends MediaCarrier>(messages: T[]): Promise<T[]> {
-  const idsOf = (m: T) => [m.audioMediaId, m.embedData?.photoMediaId].filter(Boolean).map(String);
-  const ids = Array.from(new Set(messages.flatMap(idsOf)));
+  const ids = Array.from(new Set(messages.flatMap(m => mediaIdsOf(m))));
   if (ids.length === 0) return messages;
   const media = await Media.find({ _id: { $in: ids } }).select('storageKey');
   const urls = new Map<string, string>();
@@ -107,6 +110,11 @@ async function withFreshAudio<T extends MediaCarrier>(messages: T[]): Promise<T[
     if (audio) out = { ...out, audioUrl: audio };
     const photo = m.embedData?.photoMediaId ? urls.get(String(m.embedData.photoMediaId)) : undefined;
     if (photo) out = { ...out, embedData: { ...out.embedData, photoUrl: photo } };
+    const list = (m.embedData as any)?.photos;
+    if (Array.isArray(list)) {
+      const photos = list.map((p: any) => ({ ...p, photoUrl: urls.get(String(p?.photoMediaId)) ?? p?.photoUrl }));
+      out = { ...out, embedData: { ...out.embedData, photos } };
+    }
     return out;
   });
 }
@@ -1022,15 +1030,12 @@ communityChatRouter.post(
         }
       }
 
-      // A photo must be an image the sender uploaded to Lumen; links to anywhere else are not accepted.
+      // Photos must be images the sender uploaded to Lumen; GIFs only from the GIF service's hosts.
       let messageEmbedData = embedData;
-      if (embedType === 'photo') {
-        const photoId = embedData?.photoMediaId;
-        const photo = photoId && mongoose.Types.ObjectId.isValid(photoId) ? await Media.findOne({ _id: photoId, userId }).select('_id mimeType') : null;
-        if (!photo || !String(photo.mimeType || '').startsWith('image/')) {
-          return res.status(400).json({ success: false, message: 'Photo could not be attached. Please upload it again.' });
-        }
-        messageEmbedData = { photoMediaId: String(photo._id), caption: embedData?.caption };
+      if (embedType === 'photo' || embedType === 'gif') {
+        const checked = embedType === 'photo' ? await checkPhotoEmbed(embedData, userId) : checkGifEmbed(embedData);
+        if (!checked.ok) return res.status(400).json({ success: false, message: checked.message });
+        messageEmbedData = checked.embedData;
       }
 
       let voiceMediaId: mongoose.Types.ObjectId | undefined;
@@ -1075,6 +1080,16 @@ communityChatRouter.post(
           : undefined;
       broadcastMessageCreated(targetChannelId.toString(), publicView, dmUserIds);
 
+      // Delivered tick: members whose app is connected right now have the message already.
+      if (targetChannel.type === 'dm' && !dmPending) {
+        for (const memberId of (targetChannel.dmMemberIds ?? []).map(String)) {
+          if (memberId === userId.toString() || !isUserOnline(memberId)) continue;
+          void markDelivered(new mongoose.Types.ObjectId(memberId), targetChannelId, String(message._id))
+            .then((state) => state?.lastDeliveredMessageId && announceReceipt(targetChannel as any, memberId, { delivered: state.lastDeliveredMessageId.toString(), at: new Date() }))
+            .catch(() => undefined);
+        }
+      }
+
       // Push for DMs, replies and @mentions only; runs after the response and never blocks it.
       void notifyCommunityMessage({
         channel: targetChannel,
@@ -1089,6 +1104,75 @@ communityChatRouter.post(
         success: true,
         data: formatted,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/v1/community/messages/:id/forward {channelIds} - send a copy of a message to up to 5 of my direct chats or groups.
+// Photos, GIFs and voice notes are shared by reference (the people there could not otherwise open them).
+communityChatRouter.post(
+  '/messages/:id/forward',
+  validate(ForwardMessageSchema),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const me = uid(req);
+      const found = await accessibleMessage(req, res, req.params.id);
+      if (!found) return;
+      const { message, channel: source } = found;
+      if (message.isSystem) return res.status(400).json({ success: false, message: 'This cannot be forwarded.' });
+      const targets = Array.from(new Set((req.body as { channelIds: string[] }).channelIds));
+      const sender = await User.findById(me).select('name').lean();
+      const results: Array<{ channelId: string; ok: boolean; message?: string }> = [];
+
+      for (const target of targets) {
+        const ch: any = await loadChannel(target);
+        if (!ch || ch.type !== 'dm' || !(await canAccessChannel(me, ch))) { results.push({ channelId: target, ok: false, message: 'Chat not found' }); continue; }
+        if (ch.dmStatus && ch.dmStatus !== 'accepted') { results.push({ channelId: target, ok: false, message: 'That chat is still a message request' }); continue; }
+        if (!ch.isGroup) {
+          const peer = (ch.dmMemberIds ?? []).find((m: any) => String(m) !== me.toString());
+          if (peer && (await eitherBlocked(me, peer))) { results.push({ channelId: target, ok: false, message: 'You cannot message this person' }); continue; }
+        }
+        const original = message.toObject();
+        const copy = await CommunityMessage.create({
+          channelId: ch._id,
+          senderId: me,
+          senderDisplayName: sender?.name || 'Lumen Member',
+          senderAvatarEmoji: '🌟',
+          senderRoleColor: '#38BDF8',
+          senderRoleBadges: ['Community Member'],
+          isAnonymous: false,
+          content: original.content || '',
+          contentWarning: original.contentWarning,
+          audioMediaId: original.audioMediaId,
+          audioDurationSeconds: original.audioDurationSeconds,
+          embedType: original.embedType,
+          embedData: original.embedData,
+          isForwarded: true,
+          forwardedFrom: original.isAnonymous ? {} : { displayName: original.senderDisplayName },
+        });
+        await CommunityChannel.updateOne({ _id: ch._id }, { $inc: { messageCount: 1 } });
+        const [fresh] = await withFreshAudio([copy.toObject() as any]);
+        const view = { ...fresh, _id: String(copy._id), channelId: String(ch._id), senderId: me.toString(), reactions: {}, userReactions: [] };
+        const members = (ch.dmMemberIds ?? []).map(String);
+        broadcastMessageCreated(String(ch._id), view, members);
+        for (const memberId of members) {
+          if (memberId === me.toString() || !isUserOnline(memberId)) continue;
+          void markDelivered(new mongoose.Types.ObjectId(memberId), ch._id, String(copy._id))
+            .then((state) => state?.lastDeliveredMessageId && announceReceipt(ch, memberId, { delivered: state.lastDeliveredMessageId.toString(), at: new Date() }))
+            .catch(() => undefined);
+        }
+        void notifyCommunityMessage({
+          channel: ch,
+          message: copy,
+          senderId: me.toString(),
+          canSee: async (id) => (await canAccessChannel(id, ch)) && !(await eitherBlocked(id, me)),
+        });
+        results.push({ channelId: String(ch._id), ok: true });
+      }
+      void source;
+      res.json({ success: true, data: results });
     } catch (err) {
       next(err);
     }
@@ -1315,18 +1399,9 @@ communityChatRouter.post(
       if (!gated) return;
       const targetChannelId = gated._id as mongoose.Types.ObjectId;
 
-      const readState = await ChannelReadState.findOneAndUpdate(
-        { userId, channelId: targetChannelId },
-        {
-          $set: {
-            lastReadMessageId: lastReadMessageId && mongoose.Types.ObjectId.isValid(lastReadMessageId)
-              ? new mongoose.Types.ObjectId(lastReadMessageId)
-              : undefined,
-            lastReadAt: new Date(),
-          },
-        },
-        { upsert: true, new: true }
-      );
+      // Only moves forward, so an old screen can never un-read newer messages. Without an id: up to the newest.
+      const readState = await markRead(userId, targetChannelId, lastReadMessageId);
+      void announceReceipt(gated as any, userId.toString(), { read: readState?.lastReadMessageId?.toString(), delivered: readState?.lastDeliveredMessageId?.toString(), at: new Date() });
 
       res.json({ success: true, data: readState });
     } catch (err) {
@@ -1357,6 +1432,40 @@ communityChatRouter.get(
             }
           : null,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/v1/community/channels/:channelId/delivered - this phone has received messages up to messageId
+communityChatRouter.post(
+  '/channels/:channelId/delivered',
+  validate(MarkChannelReadSchema),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = uid(req);
+      const gated = await accessibleChannel(req, res, req.params.channelId);
+      if (!gated) return;
+      const state = await markDelivered(userId, gated._id as mongoose.Types.ObjectId, req.body.lastReadMessageId);
+      if (state?.lastDeliveredMessageId) {
+        void announceReceipt(gated as any, userId.toString(), { delivered: state.lastDeliveredMessageId.toString(), at: new Date() });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// GET /api/v1/community/channels/:channelId/receipts - who has received and seen what (direct chats and groups only)
+communityChatRouter.get(
+  '/channels/:channelId/receipts',
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const gated = await accessibleChannel(req, res, req.params.channelId);
+      if (!gated) return;
+      res.json({ success: true, data: await receiptsFor(gated as any, uid(req).toString()) });
     } catch (err) {
       next(err);
     }
@@ -1427,6 +1536,7 @@ communityChatRouter.get(
         .sort({ updatedAt: -1 })
         .lean();
 
+      const viewerPrefs = (await User.findById(userId).select('preferences.communityShowOnline').lean())?.preferences;
       // Enrich with target user profile, last message snippet, and unread count
       const enriched = await Promise.all(
         dmChannels.map(async (c: any) => {
@@ -1444,11 +1554,14 @@ communityChatRouter.get(
           if (targetUserId) {
             const u = await User.findById(targetUserId).lean();
             if (u) {
+              const pres = presenceFor(viewerPrefs, u as any);
               dmUser = {
                 _id: u._id.toString(),
                 displayName: u.name || 'Lumen Member',
                 avatarEmoji: '🌟',
-                isOnline: isUserOnline(u._id.toString()),
+                // Hidden (either of you turned it off) is sent as unknown, never as offline.
+                isOnline: pres.hidden ? undefined : pres.isOnline,
+                lastSeenAt: pres.lastSeenAt,
               };
             }
           }
@@ -1468,7 +1581,8 @@ communityChatRouter.get(
             if (lastMsg.embedType === 'note') snippet = `Shared a note: ${lastMsg.embedData?.note?.title || 'Note'}`;
             else if (lastMsg.embedType === 'todo_list') snippet = `Shared a task list: ${lastMsg.embedData?.todo?.listName || 'List'}`;
             else if (lastMsg.embedType === 'log_template') snippet = `Shared a template: ${lastMsg.embedData?.logTemplate?.title || 'Template'}`;
-            else if (lastMsg.embedType === 'photo') snippet = 'Shared a photo';
+            else if (lastMsg.embedType === 'photo') { const n = Array.isArray(lastMsg.embedData?.photos) ? lastMsg.embedData.photos.length : 1; snippet = n > 1 ? 'Shared ' + n + ' photos' : (lastMsg.embedData?.photos?.[0]?.isGif ? 'Shared a GIF' : 'Shared a photo'); }
+            else if (lastMsg.embedType === 'gif') snippet = 'Sent a GIF';
 
             lastMessageData = {
               _id: lastMsg._id.toString(),
@@ -1682,9 +1796,12 @@ communityChatRouter.post(
 // GET /api/v1/community/me/settings - my status and whether community push is on
 communityChatRouter.get('/me/settings', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const me = await User.findById(uid(req)).select('preferences.communityStatus preferences.communityPush preferences.communityQuiet').lean();
-    const prefs = (me?.preferences ?? {}) as { communityStatus?: string; communityPush?: boolean; communityQuiet?: boolean };
-    res.json({ success: true, data: { status: prefs.communityStatus ?? '', push: prefs.communityPush !== false, quiet: prefs.communityQuiet === true } });
+    const me = await User.findById(uid(req)).select('preferences.communityStatus preferences.communityPush preferences.communityQuiet preferences.communityLockscreenText preferences.communityReadReceipts preferences.communityShowOnline').lean();
+    const prefs = (me?.preferences ?? {}) as { communityStatus?: string; communityPush?: boolean; communityQuiet?: boolean; communityLockscreenText?: boolean; communityReadReceipts?: boolean; communityShowOnline?: boolean };
+    res.json({ success: true, data: {
+      status: prefs.communityStatus ?? '', push: prefs.communityPush !== false, quiet: prefs.communityQuiet === true,
+      lockscreenText: prefs.communityLockscreenText !== false, readReceipts: prefs.communityReadReceipts !== false, showOnline: prefs.communityShowOnline !== false,
+    } });
   } catch (err) {
     next(err);
   }
@@ -1696,7 +1813,7 @@ communityChatRouter.put(
   validate(CommunitySettingsSchema),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const { status, push, quiet } = req.body as { status?: string; push?: boolean; quiet?: boolean };
+      const { status, push, quiet, lockscreenText, readReceipts, showOnline } = req.body as { status?: string; push?: boolean; quiet?: boolean; lockscreenText?: boolean; readReceipts?: boolean; showOnline?: boolean };
       const set: Record<string, unknown> = {};
       const unset: Record<string, ''> = {};
       if (status !== undefined) {
@@ -1705,6 +1822,9 @@ communityChatRouter.put(
       }
       if (push !== undefined) set['preferences.communityPush'] = push;
       if (quiet !== undefined) set['preferences.communityQuiet'] = quiet;
+      if (lockscreenText !== undefined) set['preferences.communityLockscreenText'] = lockscreenText;
+      if (readReceipts !== undefined) set['preferences.communityReadReceipts'] = readReceipts;
+      if (showOnline !== undefined) set['preferences.communityShowOnline'] = showOnline;
       await User.updateOne({ _id: uid(req) }, { ...(Object.keys(set).length ? { $set: set } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) });
       res.json({ success: true });
     } catch (err) {
@@ -2027,13 +2147,10 @@ communityChatRouter.post(
       const userId = uid(req);
       const { title, tags, content, contentWarning, isAnonymous, senderAvatarEmoji, embedType } = req.body;
       let embedData = req.body.embedData;
-      if (embedType === 'photo') {
-        const photoId = embedData?.photoMediaId;
-        const photo = photoId && mongoose.Types.ObjectId.isValid(photoId) ? await Media.findOne({ _id: photoId, userId }).select('_id mimeType') : null;
-        if (!photo || !String(photo.mimeType || '').startsWith('image/')) {
-          return res.status(400).json({ success: false, message: 'Photo could not be attached. Please upload it again.' });
-        }
-        embedData = { photoMediaId: String(photo._id) };
+      if (embedType === 'photo' || embedType === 'gif') {
+        const checked = embedType === 'photo' ? await checkPhotoEmbed(embedData, userId, false) : checkGifEmbed(embedData);
+        if (!checked.ok) return res.status(400).json({ success: false, message: checked.message });
+        embedData = checked.embedData;
       }
 
       const gated = await accessibleChannel(req, res, channelId);

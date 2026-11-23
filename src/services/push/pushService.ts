@@ -18,6 +18,8 @@ export interface PushMessage {
   data?: Record<string, unknown>;
   /** Android notification channel; it must exist on the device. */
   channelId?: string;
+  /** Action buttons (Reply, Mark as read): a category the app registered. */
+  categoryId?: string;
 }
 
 export type PushResult = { ok: true; sent: number } | { ok: false; reason: 'no_token' | 'failed' };
@@ -76,6 +78,7 @@ export async function sendToUser(userId: string | mongoose.Types.ObjectId, msg: 
     sound: 'default',
     priority: 'high',
     ...(msg.channelId ? { channelId: msg.channelId } : {}),
+    ...(msg.categoryId ? { categoryId: msg.categoryId } : {}),
   }));
 
   let sent = 0;

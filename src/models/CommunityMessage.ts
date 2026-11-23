@@ -16,6 +16,9 @@ export interface ICommunityMessageDoc extends Document {
   isAnonymous: boolean;
   /** A notice such as "Ana added Cy" shown in the middle of the chat, not a person's message. */
   isSystem?: boolean;
+  /** Forwarded from another chat. forwardedFrom.displayName is left out when the original was anonymous. */
+  isForwarded?: boolean;
+  forwardedFrom?: { displayName?: string };
   content: string;
   contentWarning?: string;
   isEdited?: boolean;
@@ -45,7 +48,16 @@ export interface ICommunityMessageDoc extends Document {
     todo?: ITodoEmbedPayload;
     logTemplate?: ILogTemplateEmbedPayload;
     photoUrl?: string;
+    photoMediaId?: string;
+    /** Several photos in one message (the first is also in photoMediaId for older app versions). */
+    photos?: Array<{ photoMediaId: string; photoUrl?: string; width?: number; height?: number; isGif?: boolean }>;
     caption?: string;
+    /** A GIF from GIF search. */
+    gifUrl?: string;
+    previewUrl?: string;
+    gifId?: string;
+    width?: number;
+    height?: number;
   };
   reactions: Map<string, number>;
   userReactions: Map<string, string[]>; // userId -> list of emojis
@@ -64,6 +76,8 @@ const CommunityMessageSchema = new Schema<ICommunityMessageDoc>(
     senderRoleBadges: { type: [String], default: [] },
     isAnonymous: { type: Boolean, default: false },
     isSystem: { type: Boolean, default: false },
+    isForwarded: { type: Boolean, default: false },
+    forwardedFrom: { displayName: { type: String, maxlength: 80 } },
     content: { type: String, maxlength: 3000, default: '' },
     contentWarning: { type: String, maxlength: 60 },
     isEdited: { type: Boolean, default: false },
@@ -89,7 +103,7 @@ const CommunityMessageSchema = new Schema<ICommunityMessageDoc>(
     },
     embedType: {
       type: String,
-      enum: ['note', 'todo_list', 'log_template', 'photo'],
+      enum: ['note', 'todo_list', 'log_template', 'photo', 'gif'],
     },
     embedData: { type: Schema.Types.Mixed },
     reactions: {

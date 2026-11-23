@@ -228,11 +228,12 @@ describe('community routes', () => {
     });
 
     it('refuses media that belongs to someone else or is not an image', async () => {
-      const findMedia = jest.spyOn(Media, 'findOne');
-      findMedia.mockImplementation((() => ({ select: async () => null })) as never);
+      const findMedia = jest.spyOn(Media, 'find');
+      findMedia.mockImplementation((() => ({ select: async () => [] })) as never);
       expect((await post({ photoMediaId: String(oid()) })).status).toBe(400);
-      findMedia.mockImplementation((() => ({ select: async () => ({ _id: oid(), mimeType: 'application/pdf' }) })) as never);
-      expect((await post({ photoMediaId: String(oid()) })).status).toBe(400);
+      const pdf = oid();
+      findMedia.mockImplementation((() => ({ select: async () => [{ _id: pdf, mimeType: 'application/pdf' }] })) as never);
+      expect((await post({ photoMediaId: String(pdf) })).status).toBe(400);
     });
   });
 
@@ -302,7 +303,7 @@ describe('community routes', () => {
     it('reports the status back, defaulting to notifications on', async () => {
       jest.spyOn(User, 'findById').mockImplementation((() => ({ select: () => ({ lean: async () => ({ preferences: {} }) }) })) as never);
       const res = await as(request(app).get('/community/me/settings'));
-      expect(res.body.data).toEqual({ status: '', push: true, quiet: false });
+      expect(res.body.data).toEqual({ status: '', push: true, quiet: false, lockscreenText: true, readReceipts: true, showOnline: true });
     });
   });
 

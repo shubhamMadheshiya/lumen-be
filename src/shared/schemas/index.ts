@@ -614,7 +614,25 @@ export type MoveNoteDto = z.infer<typeof MoveNoteSchema>;
 
 // ────────── Community Chat & Health Artifact Exchange ──────────
 
-export const CommunityEmbedTypeEnum = z.enum(['note', 'todo_list', 'log_template', 'photo']);
+export const CommunityEmbedTypeEnum = z.enum(['note', 'todo_list', 'log_template', 'photo', 'gif']);
+
+/** One photo of a chat message (the server checks the media id belongs to the sender). */
+export const ChatPhotoSchema = z.object({
+  photoMediaId: z.string().min(1).max(40),
+  photoUrl: z.string().max(2000).optional(),
+  width: z.number().positive().max(20000).optional(),
+  height: z.number().positive().max(20000).optional(),
+});
+
+/** Chat GIF fields (from GIF search); the server only accepts the GIF service's own hosts. */
+const ChatGifFields = {
+  gifUrl: z.string().max(600).optional(),
+  previewUrl: z.string().max(600).optional(),
+  gifId: z.string().max(80).optional(),
+  width: z.number().positive().max(20000).optional(),
+  height: z.number().positive().max(20000).optional(),
+  description: z.string().max(200).optional(),
+};
 
 export const NoteEmbedPayloadSchema = z.object({
   noteId: z.string().optional(),
@@ -670,7 +688,9 @@ export const CreateCommunityMessageSchema = z.object({
     logTemplate: LogTemplateEmbedPayloadSchema.optional(),
     photoUrl: z.string().optional(),
     photoMediaId: z.string().optional(),
+    photos: z.array(ChatPhotoSchema).min(1).max(10).optional(),
     caption: z.string().max(500).optional(),
+    ...ChatGifFields,
   }).optional(),
 });
 
@@ -680,6 +700,11 @@ export const EditCommunityMessageSchema = z.object({
 
 export const PinCommunityMessageSchema = z.object({
   isPinned: z.boolean().optional(),
+});
+
+/** Forward one message to up to 5 direct chats or groups. */
+export const ForwardMessageSchema = z.object({
+  channelIds: z.array(z.string().min(1).max(60)).min(1).max(5),
 });
 
 export const MarkChannelReadSchema = z.object({
@@ -697,7 +722,8 @@ export const TimeoutUserSchema = z.object({
 });
 
 export const ReactCommunityMessageSchema = z.object({
-  emoji: z.string().min(1).max(10),
+  // Room for long emoji (families, flags, skin tones are several characters).
+  emoji: z.string().min(1).max(32),
 });
 
 export const CreateForumPostSchema = z.object({
@@ -715,6 +741,8 @@ export const CreateForumPostSchema = z.object({
     logTemplate: LogTemplateEmbedPayloadSchema.optional(),
     photoUrl: z.string().optional(),
     photoMediaId: z.string().optional(),
+    photos: z.array(ChatPhotoSchema).min(1).max(10).optional(),
+    ...ChatGifFields,
   }).optional(),
 });
 
@@ -752,6 +780,12 @@ export const CommunitySettingsSchema = z.object({
   status: z.string().trim().max(60).optional(),
   push: z.boolean().optional(),
   quiet: z.boolean().optional(),
+  /** Show the sender and message text on the lock screen. */
+  lockscreenText: z.boolean().optional(),
+  /** Send and see "seen" ticks (reciprocal). */
+  readReceipts: z.boolean().optional(),
+  /** Show when I am online and last seen (reciprocal). */
+  showOnline: z.boolean().optional(),
 }).refine(v => Object.keys(v).length > 0, { message: 'Nothing to update' });
 
 export const ChannelSettingsSchema = z.object({

@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { pushRecipients, pushText, notifyCommunityMessage, communityPushAllowed, CHANNEL_COMMUNITY } from '../services/communityPush';
+import { pushRecipients, pushText, notifyCommunityMessage, communityPushAllowed, lockscreenChoice, CHANNEL_COMMUNITY, CHANNEL_COMMUNITY_PUBLIC, CHANNEL_COMMUNITY_PRIVATE } from '../services/communityPush';
 import { sendToUser } from '../services/push/pushService';
 import { CommunityMessage } from '../models/CommunityMessage';
 import { User } from '../models/User';
@@ -39,7 +39,9 @@ describe('pushText', () => {
   it('words each kind of push', () => {
     expect(pushText('dm', 'x', 'Asha', 'hello', false)).toEqual({ title: 'Asha', body: 'hello' });
     expect(pushText('reply', 'general', 'Asha', 'thanks', false).title).toBe('Asha replied to you');
-    expect(pushText('mention', 'general', 'Someone', '', true).body).toBe('#general: Sent a voice note');
+    expect(pushText('mention', 'general', 'Someone', '', true).body).toBe('#general: 🎤 Voice note');
+    expect(pushText('dm', 'x', 'Asha', '', false, false, false, 'photo').body).toBe('📷 Photo');
+    expect(pushText('dm', 'x', 'Asha', '', false, false, false, 'gif').body).toBe('GIF');
   });
 });
 
@@ -63,7 +65,9 @@ describe('notifyCommunityMessage', () => {
     });
     expect(sendToUser).toHaveBeenCalledTimes(1);
     expect(sendToUser).toHaveBeenCalledWith(String(parentAuthor), expect.objectContaining({
-      channelId: CHANNEL_COMMUNITY, data: { type: 'COMMUNITY', route: '/community/general-lounge' },
+      channelId: CHANNEL_COMMUNITY,
+      categoryId: 'lumen_category_community',
+      data: expect.objectContaining({ type: 'COMMUNITY', route: '/community/general-lounge', channelId: String(base._id) }),
     }));
   });
 
@@ -94,5 +98,41 @@ describe('notifyCommunityMessage', () => {
     await expect(notifyCommunityMessage({
       channel: { ...base, type: 'dm', dmMemberIds: [oid()] }, message: { content: 'x', senderDisplayName: 'A' }, senderId: String(oid()), canSee: async () => true,
     })).resolves.toBeUndefined();
+  });
+});
+
+describe('WhatsApp-style delivery', () => {
+  const dm = { _id: oid(), slug: 'dm-1', name: 'Ben', type: 'dm', dmMemberIds: [oid(), oid()] };
+  const withPrefs = (preferences: Record<string, unknown>) =>
+    jest.spyOn(User, 'findById').mockImplementation((() => ({ select: () => ({ lean: async () => ({ preferences }) }) })) as never);
+
+  it('shows sender and text on the lock screen by default, or only "new message" when switched off', () => {
+    const t = { title: 'Ben', body: 'hello' };
+    expect(lockscreenChoice(true, t)).toEqual({ channelId: CHANNEL_COMMUNITY_PUBLIC, title: 'Ben', body: 'hello' });
+    const hidden = lockscreenChoice(false, t);
+    expect(hidden.channelId).toBe(CHANNEL_COMMUNITY_PRIVATE);
+    expect(JSON.stringify(hidden)).not.toContain('hello');
+    expect(JSON.stringify(hidden)).not.toContain('Ben');
+  });
+
+  it('uses the private channel and hides the text when the member turned lock-screen text off', async () => {
+    withPrefs({ communityLockscreenText: false });
+    await notifyCommunityMessage({ channel: dm, message: { _id: oid(), content: 'my diagnosis', senderDisplayName: 'Ben' }, senderId: String(oid()), canSee: async () => true, isViewing: () => false });
+    const sent = (sendToUser as jest.Mock).mock.calls[0][1];
+    expect(sent.channelId).toBe(CHANNEL_COMMUNITY_PRIVATE);
+    expect(JSON.stringify(sent)).not.toContain('diagnosis');
+  });
+
+  it('carries the message id so Mark as read and Reply know what to act on', async () => {
+    withPrefs({});
+    const messageId = oid();
+    await notifyCommunityMessage({ channel: dm, message: { _id: messageId, content: 'hi', senderDisplayName: 'Ben' }, senderId: String(oid()), canSee: async () => true, isViewing: () => false });
+    expect((sendToUser as jest.Mock).mock.calls[0][1].data).toEqual(expect.objectContaining({ messageId: String(messageId), channelId: String(dm._id) }));
+  });
+
+  it('does not push to someone who has this chat open on screen right now', async () => {
+    withPrefs({});
+    await notifyCommunityMessage({ channel: dm, message: { _id: oid(), content: 'hi', senderDisplayName: 'Ben' }, senderId: String(oid()), canSee: async () => true, isViewing: () => true });
+    expect(sendToUser).not.toHaveBeenCalled();
   });
 });

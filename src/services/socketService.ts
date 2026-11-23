@@ -3,8 +3,13 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
 
+// presence is announced lazily to avoid a require cycle (presence imports this file)
+const presence = () => import('./presence');
+
 interface AuthenticatedSocket extends Socket {
   userId?: string;
+  /** False once the app told us it went to the background (so a push is still worth sending). */
+  appActive?: boolean;
 }
 
 interface AccessPayload {
@@ -58,7 +63,9 @@ export function initSocketService(httpServer: http.Server): SocketIOServer {
   io.on('connection', (socket: AuthenticatedSocket) => {
     const userId = socket.userId;
     if (userId) {
+      const wasOnline = isUserOnline(userId);
       socket.join(`user:${userId}`);
+      if (!wasOnline) presence().then((p) => p.announcePresence(userId, true)).catch(() => undefined);
     }
 
     // Rooms are keyed by the channel's real id. Clients may name a channel by slug, so resolve it first,
@@ -85,31 +92,46 @@ export function initSocketService(httpServer: http.Server): SocketIOServer {
       if (id) socket.leave(`channel:${id}`);
     });
 
+    // The app tells us when it is in the foreground, so a chat that is open on screen is not pushed to.
+    socket.on('app_state', (data: { state?: string }) => {
+      socket.appActive = data?.state !== 'background';
+    });
+
     // Live typing indicator (only for rooms this socket has actually joined)
     socket.on('typing_start', async (data: { channelId: string; displayName?: string }) => {
       const id = await resolveAllowed(data?.channelId);
       if (!id || !socket.rooms.has(`channel:${id}`)) return;
-      socket.to(`channel:${id}`).emit('user_typing', {
-        channelId: id,
-        userId: userId!,
-        displayName: String(data.displayName || 'Someone').slice(0, 40),
-        isTyping: true,
-      });
+      const typing = { channelId: id, userId: userId!, displayName: String(data.displayName || 'Someone').slice(0, 40), isTyping: true };
+      socket.to(`channel:${id}`).emit('user_typing', typing);
+      emitToOtherMembers(id, userId!, 'user_typing', typing);
     });
 
     socket.on('typing_stop', async (data: { channelId: string }) => {
       const id = await resolveAllowed(data?.channelId);
       if (!id || !socket.rooms.has(`channel:${id}`)) return;
-      socket.to(`channel:${id}`).emit('user_typing', { channelId: id, userId: userId!, isTyping: false });
+      const stopped = { channelId: id, userId: userId!, isTyping: false };
+      socket.to(`channel:${id}`).emit('user_typing', stopped);
+      emitToOtherMembers(id, userId!, 'user_typing', stopped);
     });
 
     socket.on('disconnect', () => {
-      // Automatic cleanup handled by socket.io rooms
+      // Rooms are cleaned up by socket.io. When the person's last connection closes, they went offline.
+      if (userId) setTimeout(() => { if (!isUserOnline(userId)) presence().then((p) => p.announcePresence(userId, false)).catch(() => undefined); }, 3000).unref?.();
     });
   });
 
   ioInstance = io;
   return io;
+}
+
+/** Sends an event to the other members of a direct chat or group (so their chat list can react). */
+function emitToOtherMembers(channelId: string, fromUserId: string, event: string, payload: unknown): void {
+  import('../routes/communityChat').then(async ({ loadChannel }) => {
+    const ch: any = await loadChannel(channelId);
+    if (!ch || ch.type !== 'dm') return;
+    const others = (ch.dmMemberIds ?? []).map(String).filter((m: string) => m !== fromUserId);
+    broadcastToUsers(others, event, payload);
+  }).catch(() => undefined);
 }
 
 export function getIO(): SocketIOServer | null {
@@ -120,6 +142,24 @@ export function isUserOnline(userId: string): boolean {
   if (!ioInstance) return false;
   const room = ioInstance.sockets.adapter.rooms.get(`user:${userId}`);
   return !!room && room.size > 0;
+}
+
+/** True when the person has this chat open in the foreground right now (no push needed). */
+export function isViewingChannel(userId: string, channelId: string): boolean {
+  if (!ioInstance) return false;
+  const room = ioInstance.sockets.adapter.rooms.get(`channel:${channelId}`);
+  if (!room) return false;
+  for (const sid of room) {
+    const s = ioInstance.sockets.sockets.get(sid) as AuthenticatedSocket | undefined;
+    if (s?.userId === userId && s.appActive !== false) return true;
+  }
+  return false;
+}
+
+/** Tells chat members that someone's delivered/read position moved (ticks), and live presence changes. */
+export function broadcastToUsers(userIds: string[], event: string, payload: unknown): void {
+  if (!ioInstance) return;
+  for (const id of userIds) ioInstance.to(`user:${id}`).emit(event, payload);
 }
 
 export function broadcastMessageCreated(channelId: string, message: any, dmUserIds?: string[]): void {
